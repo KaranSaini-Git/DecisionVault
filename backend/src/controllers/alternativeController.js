@@ -1,4 +1,5 @@
 import prisma from "../db/prisma.js";
+import { logActivity } from "../services/activityService.js";
 
 const getOwnedDecision = async (decisionId, userId) => {
   return prisma.decision.findFirst({
@@ -36,8 +37,17 @@ const createAlternative = async (req, res) => {
         cost,
         feasibility,
         risk,
-        decisionId: decision.id,
+          decisionId: decision.id,
       },
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      action: "ALTERNATIVE_CREATED",
+      entityType: "Alternative",
+      entityId: alternative.id,
+      decisionId: decision.id,
+      metadata: { name: alternative.name },
     });
 
     return res.status(201).json(alternative);
@@ -134,6 +144,15 @@ const updateAlternative = async (req, res) => {
       data,
     });
 
+    await logActivity({
+      userId: req.user.userId,
+      action: "ALTERNATIVE_UPDATED",
+      entityType: "Alternative",
+      entityId: alternative.id,
+      decisionId: decision.id,
+      metadata: { name: alternative.name },
+    });
+
     return res.status(200).json(alternative);
   } catch (error) {
     console.error("Update alternative error:", error);
@@ -173,6 +192,15 @@ const deleteAlternative = async (req, res) => {
       where: {
         id: existingAlternative.id,
       },
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      action: "ALTERNATIVE_DELETED",
+      entityType: "Alternative",
+      entityId: existingAlternative.id,
+      decisionId: decision.id,
+      metadata: { name: existingAlternative.name },
     });
 
     return res.status(200).json({

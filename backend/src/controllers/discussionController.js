@@ -1,4 +1,5 @@
 import prisma from "../db/prisma.js";
+import { logActivity } from "../services/activityService.js";
 
 const discussionInclude = {
   createdBy: {
@@ -69,6 +70,15 @@ const createDiscussion = async (req, res) => {
       include: discussionInclude,
     });
 
+    await logActivity({
+      userId: req.user.userId,
+      action: "DISCUSSION_CREATED",
+      entityType: "Discussion",
+      entityId: discussion.id,
+      decisionId: discussion.decisionId,
+      metadata: { type: discussion.type },
+    });
+
     return res.status(201).json({
       discussion,
     });
@@ -119,6 +129,7 @@ const updateDiscussion = async (req, res) => {
         id: parsedDiscussionId,
         decisionId: Number(decisionId),
       },
+      select: { id: true, createdById: true, decisionId: true },
     });
 
     if (!existing) {
@@ -126,6 +137,9 @@ const updateDiscussion = async (req, res) => {
         message: "Discussion not found",
       });
     }
+
+    const canEdit = existing.createdById === req.user.userId || ["Manager", "Administrator"].includes(req.user.role);
+    if (!canEdit) return res.status(403).json({ message: "You can only edit your own discussion entries" });
 
     const data = {};
 
@@ -143,6 +157,15 @@ const updateDiscussion = async (req, res) => {
       },
       data,
       include: discussionInclude,
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      action: "DISCUSSION_UPDATED",
+      entityType: "Discussion",
+      entityId: discussion.id,
+      decisionId: discussion.decisionId,
+      metadata: { type: discussion.type },
     });
 
     return res.status(200).json({
@@ -178,10 +201,21 @@ const deleteDiscussion = async (req, res) => {
       });
     }
 
+    const canDelete = existing.createdById === req.user.userId || ["Manager", "Administrator"].includes(req.user.role);
+    if (!canDelete) return res.status(403).json({ message: "You can only delete your own discussion entries" });
+
     await prisma.discussion.delete({
       where: {
         id: parsedDiscussionId,
       },
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      action: "DISCUSSION_DELETED",
+      entityType: "Discussion",
+      entityId: parsedDiscussionId,
+      decisionId: Number(decisionId),
     });
 
     return res.status(200).json({
@@ -212,6 +246,7 @@ const uploadDiscussionAttachment = async (req, res) => {
       },
       select: {
         id: true,
+        decisionId: true,
       },
     });
 
@@ -227,6 +262,15 @@ const uploadDiscussionAttachment = async (req, res) => {
         filePath: req.file.path,
         discussionId: Number(discussionId),
       },
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      action: "DISCUSSION_ATTACHMENT_UPLOADED",
+      entityType: "DiscussionAttachment",
+      entityId: attachment.id,
+      decisionId: discussion.decisionId,
+      metadata: { filename: attachment.filename },
     });
 
     return res.status(201).json({
