@@ -26,6 +26,19 @@ import {
 } from "lucide-react";
 
 import "../styles/Dashboard.css";
+import ApprovalPanel from "../components/ApprovalPanel.jsx";
+import {
+  ReviewsPage,
+  TeamsPage,
+  KnowledgePage,
+  DiscussionsPage,
+  DocumentsPage,
+  AnalyticsPage,
+  UsersPage,
+  AuditPage,
+  ReportsPage,
+  SettingsPage,
+} from "../components/WorkspacePages.jsx";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -34,6 +47,7 @@ const EMPTY_DECISION_FORM = {
   title: "",
   problemStatement: "",
   status: "Draft",
+  teamId: "",
 };
 
 const EMPTY_ALTERNATIVE_FORM = {
@@ -69,6 +83,8 @@ function Dashboard() {
     EMPTY_ALTERNATIVE_FORM,
   );
   const [selectedFile, setSelectedFile] = useState(null);
+  const [documentCategory, setDocumentCategory] = useState("General");
+  const [documentTags, setDocumentTags] = useState("");
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [discussionForm, setDiscussionForm] = useState({
     type: "Comment",
@@ -91,6 +107,10 @@ function Dashboard() {
   const [editingAlternative, setEditingAlternative] = useState(null);
   const [decisionTab, setDecisionTab] = useState("overview");
   const [selectedAlternative, setSelectedAlternative] = useState(null);
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const normalizedRole = (currentUser?.role || "Employee").trim().toLowerCase();
 
@@ -111,6 +131,7 @@ function Dashboard() {
     { label: "Discussions", icon: MessageCircle, show: true },
     { label: "Documents", icon: FileText, show: true },
     { label: "Analytics", icon: BarChart3, show: isManager || isAdministrator },
+    { label: "Reports", icon: FileText, show: isManager || isAdministrator },
     { label: "Users", icon: Users, show: isAdministrator },
     { label: "Audit & Compliance", icon: ShieldCheck, show: isAdministrator },
   ].filter((item) => item.show);
@@ -285,6 +306,47 @@ function Dashboard() {
     }
   };
 
+  const fetchTeams = async () => {
+    try {
+      const data = await apiRequest("/api/teams");
+      setAvailableTeams(data?.teams || []);
+    } catch (error) {
+      console.error("Fetch teams error:", error);
+      setAvailableTeams([]);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const data = await apiRequest("/api/users");
+      setAvailableUsers(data?.users || []);
+    } catch (error) {
+      console.error("Fetch users error:", error);
+      setAvailableUsers([]);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await apiRequest("/api/notifications");
+      setNotifications(data?.notifications || []);
+      setUnreadNotifications(data?.unreadCount || 0);
+    } catch (error) {
+      console.error("Fetch notifications error:", error);
+      setNotifications([]);
+      setUnreadNotifications(0);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await apiRequest("/api/notifications/read-all", { method: "PATCH" });
+      await fetchNotifications();
+    } catch (error) {
+      console.error("Mark notifications read error:", error);
+    }
+  };
+
   const fetchCurrentUser = async () => {
     try {
       setUserLoading(true);
@@ -302,6 +364,19 @@ function Dashboard() {
   useEffect(() => {
     fetchDecisions();
     fetchCurrentUser();
+    fetchNotifications();
+  }, []);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchTeams();
+      fetchUsers();
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(fetchNotifications, 30000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -402,6 +477,7 @@ function Dashboard() {
       title: decision.title || "",
       problemStatement: decision.problemStatement || "",
       status: decision.status || "Draft",
+      teamId: decision.teamId ? String(decision.teamId) : "",
     });
 
     setModal({
@@ -444,6 +520,8 @@ function Dashboard() {
       setAlternativeForm(EMPTY_ALTERNATIVE_FORM);
       setEditingAlternative(null);
       setSelectedFile(null);
+      setDocumentCategory("General");
+      setDocumentTags("");
       setDiscussionForm({ type: "Comment", content: "", parentId: "" });
       setEditingDiscussion(null);
       setSelectedDiscussionFile(null);
@@ -476,6 +554,7 @@ function Dashboard() {
         body: JSON.stringify({
           title: decisionForm.title.trim(),
           problemStatement: decisionForm.problemStatement.trim(),
+          teamId: decisionForm.teamId ? Number(decisionForm.teamId) : null,
         }),
       });
 
@@ -515,6 +594,7 @@ function Dashboard() {
           title: decisionForm.title.trim(),
           problemStatement: decisionForm.problemStatement.trim(),
           status: statusApiValue(decisionForm.status),
+          teamId: decisionForm.teamId ? Number(decisionForm.teamId) : null,
         }),
       });
 
@@ -919,7 +999,7 @@ function Dashboard() {
     : undefined;
 
   return (
-    <div className="dashboard">
+    <div className={`dashboard ${showOverview ? "overview-dashboard" : ""}`}>
       <div className="dashboard-grid" />
 
       <div className="dashboard-glow dashboard-glow-1" />
@@ -1063,7 +1143,7 @@ function Dashboard() {
               >
                 <Bell size={17} />
 
-                {(reviewCount > 0 || error) && (
+                {unreadNotifications > 0 && (
                   <span className="notification-dot" />
                 )}
               </button>
@@ -1091,32 +1171,73 @@ function Dashboard() {
 
             {notificationsOpen && (
               <div className="topbar-popover notification-popover">
-                <span className="popover-label">NOTIFICATIONS</span>
-
-                <strong>
-                  {reviewCount > 0
-                    ? `${reviewCount} decision${
-                        reviewCount === 1 ? "" : "s"
-                      } under review`
-                    : error
-                      ? "Dashboard needs attention"
-                      : "Workspace is up to date"}
-                </strong>
-
+                <div className="notification-popover-head">
+                  <span className="popover-label">NOTIFICATIONS</span>
+                  {unreadNotifications > 0 && (
+                    <button type="button" onClick={markAllNotificationsRead}>
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="notification-list">
+                  {notifications.length ? (
+                    notifications.slice(0, 5).map((notification) => (
+                      <button
+                        type="button"
+                        className={`notification-item ${notification.isRead ? "read" : ""}`}
+                        key={notification.id}
+                        onClick={async () => {
+                          if (!notification.isRead) {
+                            await apiRequest(
+                              `/api/notifications/${notification.id}/read`,
+                              { method: "PATCH" },
+                            );
+                            await fetchNotifications();
+                          }
+                          if (
+                            notification.entityType === "Decision" &&
+                            notification.entityId
+                          ) {
+                            const decision = decisions.find(
+                              (item) => item.id === notification.entityId,
+                            );
+                            if (decision) {
+                              await openDecision(decision);
+                            } else {
+                              const decisionData = await apiRequest(
+                                `/api/decisions/${notification.entityId}`,
+                              );
+                              if (decisionData?.decision)
+                                await openDecision(decisionData.decision);
+                            }
+                          }
+                        }}
+                      >
+                        <span className="notification-item-icon">
+                          <Bell size={14} />
+                        </span>
+                        <span>
+                          <strong>{notification.title}</strong>
+                          <small>{notification.message}</small>
+                          <em>{formatRelativeTime(notification.createdAt)}</em>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="notification-empty">
+                      <Bell size={16} />
+                      <span>No new notifications.</span>
+                    </div>
+                  )}
+                </div>
                 {canReview && (
                   <button
                     type="button"
                     onClick={() => handlePageChange("Reviews")}
                   >
-                    Open reviews
-                    <ArrowUpRight size={13} />
+                    Open reviews <ArrowUpRight size={13} />
                   </button>
                 )}
-
-                <button type="button" onClick={fetchDecisions}>
-                  Refresh decisions
-                  <ArrowUpRight size={13} />
-                </button>
               </div>
             )}
 
@@ -1142,199 +1263,788 @@ function Dashboard() {
             )}
           </header>
 
-          {showOverview && (
-            <>
-              <section className="welcome-section">
-                <div>
-                  <div className="welcome-eyebrow">
-                    <Sparkles size={13} />
-                    Decision intelligence
-                  </div>
-
-                  <h1>
-                    Welcome back
-                    {firstName !== "there" ? `, ${firstName}` : ""}.
-                  </h1>
-
-                  <p>{roleDashboardCopy}</p>
-                </div>
-
-                <div className="welcome-actions">
-                  <span className="dashboard-date">
-                    {new Intl.DateTimeFormat("en-IN", {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    }).format(new Date())}
-                  </span>
-
-                  <button
-                    className="new-decision-button"
-                    type="button"
-                    onClick={openCreateDecision}
-                  >
-                    <span>+</span>
-                    New decision
-                  </button>
-                </div>
-              </section>
-
-              <section className="stats-grid stats-grid-five">
-                <button
-                  className="stat-card stat-button-card"
-                  type="button"
-                  onClick={() => handlePageChange("Decisions")}
-                >
-                  <div className="stat-top">
-                    <div className="stat-icon">
-                      <BarChart3 size={18} />
-                    </div>
-
-                    <span className="stat-period">All time</span>
-                  </div>
-
-                  <p>Total decisions</p>
-
-                  <div className="stat-value">{totalDecisions}</div>
-
-                  <div className="stat-footer">
-                    <span>{dashboardDecisions.length}</span>
-
-                    <span>tracked now</span>
-                  </div>
-                </button>
-
-                <button
-                  className="stat-card stat-button-card"
-                  type="button"
-                  onClick={() => setSearchQuery("Draft")}
-                >
-                  <div className="stat-top">
-                    <div className="stat-icon draft-stat-icon">
-                      <FileText size={18} />
-                    </div>
-
-                    <span className="stat-period">Active</span>
-                  </div>
-
-                  <p>Draft</p>
-
-                  <div className="stat-value">{draftCount}</div>
-
-                  <div className="stat-footer">
-                    <span>Needs attention</span>
-                  </div>
-                </button>
-
-                <button
-                  className="stat-card stat-button-card"
-                  type="button"
-                  onClick={() => setSearchQuery("Under Review")}
-                >
-                  <div className="stat-top">
-                    <div className="stat-icon review-stat-icon">
-                      <Clock3 size={18} />
-                    </div>
-
-                    <span className="stat-period">Active</span>
-                  </div>
-
-                  <p>Under review</p>
-
-                  <div className="stat-value">{reviewCount}</div>
-
-                  <div className="stat-footer">
-                    <span>In progress</span>
-                  </div>
-                </button>
-
-                <button
-                  className="stat-card stat-button-card"
-                  type="button"
-                  onClick={() => setSearchQuery("Approved")}
-                >
-                  <div className="stat-top">
-                    <div className="stat-icon success-icon">
-                      <CheckCircle2 size={18} />
-                    </div>
-
-                    <span className="stat-period">Completed</span>
-                  </div>
-
-                  <p>Approved</p>
-
-                  <div className="stat-value">{approvedCount}</div>
-
-                  <div className="stat-footer">
-                    <span className="positive">{approvalRate}%</span>
-
-                    <span>approval rate</span>
-                  </div>
-                </button>
-
-                <button
-                  className="stat-card stat-button-card"
-                  type="button"
-                  onClick={() => setSearchQuery("Rejected")}
-                >
-                  <div className="stat-top">
-                    <div className="stat-icon rejected-stat-icon">
-                      <X size={18} />
-                    </div>
-
-                    <span className="stat-period">Action</span>
-                  </div>
-
-                  <p>Rejected</p>
-
-                  <div className="stat-value">{rejectedCount}</div>
-
-                  <div className="stat-footer">
-                    <span>Requires changes</span>
-                  </div>
-                </button>
-              </section>
-
-              <section className="dashboard-primary-grid">
-                <section className="recent-section">
-                  <div className="recent-header">
+          <div className="workspace-shell-card">
+            <div className="workspace-shell-scroll">
+              {showOverview && (
+                <>
+                  <section className="welcome-section">
                     <div>
-                      <span className="section-label">DECISION LOG</span>
+                      <div className="welcome-eyebrow">
+                        <Sparkles size={13} />
+                        Decision intelligence
+                      </div>
 
-                      <h2>Recent decisions</h2>
+                      <h1>
+                        Welcome back
+                        {firstName !== "there" ? `, ${firstName}` : ""}.
+                      </h1>
+
+                      <p>{roleDashboardCopy}</p>
                     </div>
 
-                    <div className="recent-actions">
-                      <button
-                        className="view-all"
-                        type="button"
-                        onClick={() => handlePageChange("Decisions")}
-                      >
-                        View all
-                        <ChevronRight size={15} />
-                      </button>
+                    <div className="welcome-actions">
+                      <span className="dashboard-date">
+                        {new Intl.DateTimeFormat("en-IN", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        }).format(new Date())}
+                      </span>
 
                       <button
-                        className="compact-action"
+                        className="new-decision-button"
                         type="button"
                         onClick={openCreateDecision}
                       >
                         <span>+</span>
-                        Create decision
+                        New decision
                       </button>
                     </div>
+                  </section>
+
+                  <section className="stats-grid stats-grid-five">
+                    <button
+                      className="stat-card stat-button-card"
+                      type="button"
+                      onClick={() => handlePageChange("Decisions")}
+                    >
+                      <div className="stat-top">
+                        <div className="stat-icon">
+                          <BarChart3 size={18} />
+                        </div>
+
+                        <span className="stat-period">All time</span>
+                      </div>
+
+                      <p>Total decisions</p>
+
+                      <div className="stat-value">{totalDecisions}</div>
+
+                      <div className="stat-footer">
+                        <span>{dashboardDecisions.length}</span>
+
+                        <span>tracked now</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="stat-card stat-button-card"
+                      type="button"
+                      onClick={() => setSearchQuery("Draft")}
+                    >
+                      <div className="stat-top">
+                        <div className="stat-icon draft-stat-icon">
+                          <FileText size={18} />
+                        </div>
+
+                        <span className="stat-period">Active</span>
+                      </div>
+
+                      <p>Draft</p>
+
+                      <div className="stat-value">{draftCount}</div>
+
+                      <div className="stat-footer">
+                        <span>Needs attention</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="stat-card stat-button-card"
+                      type="button"
+                      onClick={() => setSearchQuery("Under Review")}
+                    >
+                      <div className="stat-top">
+                        <div className="stat-icon review-stat-icon">
+                          <Clock3 size={18} />
+                        </div>
+
+                        <span className="stat-period">Active</span>
+                      </div>
+
+                      <p>Under review</p>
+
+                      <div className="stat-value">{reviewCount}</div>
+
+                      <div className="stat-footer">
+                        <span>In progress</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="stat-card stat-button-card"
+                      type="button"
+                      onClick={() => setSearchQuery("Approved")}
+                    >
+                      <div className="stat-top">
+                        <div className="stat-icon success-icon">
+                          <CheckCircle2 size={18} />
+                        </div>
+
+                        <span className="stat-period">Completed</span>
+                      </div>
+
+                      <p>Approved</p>
+
+                      <div className="stat-value">{approvedCount}</div>
+
+                      <div className="stat-footer">
+                        <span className="positive">{approvalRate}%</span>
+
+                        <span>approval rate</span>
+                      </div>
+                    </button>
+
+                    <button
+                      className="stat-card stat-button-card"
+                      type="button"
+                      onClick={() => setSearchQuery("Rejected")}
+                    >
+                      <div className="stat-top">
+                        <div className="stat-icon rejected-stat-icon">
+                          <X size={18} />
+                        </div>
+
+                        <span className="stat-period">Action</span>
+                      </div>
+
+                      <p>Rejected</p>
+
+                      <div className="stat-value">{rejectedCount}</div>
+
+                      <div className="stat-footer">
+                        <span>Requires changes</span>
+                      </div>
+                    </button>
+                  </section>
+
+                  <section className="dashboard-primary-grid">
+                    <section className="recent-section">
+                      <div className="recent-header">
+                        <div>
+                          <span className="section-label">DECISION LOG</span>
+
+                          <h2>Recent decisions</h2>
+                        </div>
+
+                        <div className="recent-actions">
+                          <button
+                            className="view-all"
+                            type="button"
+                            onClick={() => handlePageChange("Decisions")}
+                          >
+                            View all
+                            <ChevronRight size={15} />
+                          </button>
+
+                          <button
+                            className="compact-action"
+                            type="button"
+                            onClick={openCreateDecision}
+                          >
+                            <span>+</span>
+                            Create decision
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="decision-table-head">
+                        <span>Title</span>
+                        <span>Team</span>
+                        <span>Status</span>
+                        <span>Created on</span>
+                        <span>Actions</span>
+                      </div>
+
+                      <div className="decision-list">
+                        {loading ? (
+                          <div className="empty-search-state">
+                            <Clock3 size={18} />
+
+                            <strong>Loading decisions</strong>
+
+                            <span>Fetching your workspace data.</span>
+                          </div>
+                        ) : error ? (
+                          <div className="empty-search-state">
+                            <X size={18} />
+
+                            <strong>Unable to load decisions</strong>
+
+                            <span>{error}</span>
+
+                            <button type="button" onClick={fetchDecisions}>
+                              Try again
+                            </button>
+                          </div>
+                        ) : recentDecisions.length > 0 ? (
+                          recentDecisions.map((decision) => {
+                            const Icon = decision.icon;
+
+                            const statusClass = getStatusClass(decision.status);
+
+                            return (
+                              <div
+                                className="decision-row decision-table-row"
+                                key={decision.id}
+                              >
+                                <div className="decision-left">
+                                  <div className="decision-icon">
+                                    <Icon size={17} />
+                                  </div>
+
+                                  <div className="decision-info">
+                                    <strong>{decision.name}</strong>
+
+                                    <span>{decision.team}</span>
+                                  </div>
+                                </div>
+
+                                <span className="decision-team">
+                                  {decision.team}
+                                </span>
+
+                                <span
+                                  className={`status status-${statusClass}`}
+                                >
+                                  <span />
+                                  {decision.status}
+                                </span>
+
+                                <span className="decision-date">
+                                  {decision.created}
+                                </span>
+
+                                <div className="decision-actions">
+                                  <button
+                                    className="decision-view-button"
+                                    type="button"
+                                    onClick={() => openDecision(decision)}
+                                    aria-label={`View ${decision.name}`}
+                                  >
+                                    View
+                                  </button>
+
+                                  <button
+                                    className="decision-more"
+                                    type="button"
+                                    onClick={() =>
+                                      setMoreMenu(
+                                        moreMenu === decision.name
+                                          ? null
+                                          : decision.name,
+                                      )
+                                    }
+                                    aria-label={`More options for ${decision.name}`}
+                                  >
+                                    <MoreHorizontal size={16} />
+                                  </button>
+
+                                  {moreMenu === decision.name && (
+                                    <div className="decision-more-menu">
+                                      <button
+                                        type="button"
+                                        onClick={() => openDecision(decision)}
+                                      >
+                                        Open
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openEditDecision(decision)
+                                        }
+                                      >
+                                        Edit
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteDecision(decision)
+                                        }
+                                      >
+                                        Delete
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => setMoreMenu(null)}
+                                      >
+                                        Close menu
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="empty-search-state">
+                            <Search size={18} />
+
+                            <strong>No decisions found</strong>
+
+                            <span>
+                              {searchQuery
+                                ? "Try a different search term."
+                                : "Create your first decision to get started."}
+                            </span>
+
+                            {!searchQuery && (
+                              <button
+                                type="button"
+                                onClick={openCreateDecision}
+                              >
+                                Create decision
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        className="decision-list-footer"
+                        type="button"
+                        onClick={() => handlePageChange("Decisions")}
+                      >
+                        View all decisions
+                        <ChevronRight size={15} />
+                      </button>
+                    </section>
+
+                    <section className="activity-column team-activity-column">
+                      <div className="activity-heading">
+                        <div>
+                          <span className="section-label">TEAM ACTIVITY</span>
+
+                          <h2>What’s happening</h2>
+                        </div>
+
+                        <button
+                          className="view-all"
+                          type="button"
+                          onClick={() => handlePageChange("Discussions")}
+                        >
+                          View all
+                          <ChevronRight size={15} />
+                        </button>
+                      </div>
+
+                      <div className="team-activity-list">
+                        <div className="dashboard-empty-state">
+                          <div className="dashboard-empty-icon">
+                            <Users size={18} />
+                          </div>
+
+                          <strong>No team activity yet</strong>
+
+                          <span>
+                            Team activity will appear here once collaboration
+                            features are connected.
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+                  </section>
+
+                  <section className="dashboard-lower-grid">
+                    <section className="status-card-panel">
+                      <div className="lower-card-header">
+                        <div>
+                          <span className="section-label">OVERVIEW</span>
+
+                          <h2>Decisions by status</h2>
+                        </div>
+                      </div>
+
+                      <div className="status-chart-layout">
+                        <div className="decision-donut" style={donutStyle}>
+                          <div className="decision-donut-center">
+                            <strong>{totalDecisions}</strong>
+
+                            <span>Total</span>
+                          </div>
+                        </div>
+
+                        <div className="status-legend">
+                          <div>
+                            <span className="legend-dot legend-draft" />
+                            <span>Draft</span>
+
+                            <strong>
+                              {draftCount} ({statusPercent(draftCount)}
+                              %)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-review" />
+                            <span>Under review</span>
+
+                            <strong>
+                              {reviewCount} ({statusPercent(reviewCount)}
+                              %)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-approved" />
+                            <span>Approved</span>
+
+                            <strong>
+                              {approvedCount} ({statusPercent(approvedCount)}
+                              %)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-rejected" />
+                            <span>Rejected</span>
+
+                            <strong>
+                              {rejectedCount} ({statusPercent(rejectedCount)}
+                              %)
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="lower-panel">
+                      <div className="lower-card-header">
+                        <div>
+                          <span className="section-label">
+                            TEAM CONVERSATIONS
+                          </span>
+
+                          <h2>Recent discussions</h2>
+                        </div>
+
+                        <button
+                          className="view-all"
+                          type="button"
+                          onClick={() => handlePageChange("Discussions")}
+                        >
+                          View all
+                          <ChevronRight size={15} />
+                        </button>
+                      </div>
+
+                      <div className="discussion-list">
+                        <div className="dashboard-empty-state">
+                          <div className="dashboard-empty-icon">
+                            <MessageCircle size={18} />
+                          </div>
+
+                          <strong>No discussions yet</strong>
+
+                          <span>
+                            Discussions will appear here when a decision has an
+                            active conversation.
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="lower-panel">
+                      <div className="lower-card-header">
+                        <div>
+                          <span className="section-label">WORKSPACES</span>
+
+                          <h2>My teams</h2>
+                        </div>
+
+                        <button
+                          className="view-all"
+                          type="button"
+                          onClick={() => handlePageChange("Teams")}
+                        >
+                          View all
+                          <ChevronRight size={15} />
+                        </button>
+                      </div>
+
+                      <div className="team-list">
+                        <div className="dashboard-empty-state">
+                          <div className="dashboard-empty-icon">
+                            <Users size={18} />
+                          </div>
+
+                          <strong>No teams yet</strong>
+
+                          <span>
+                            Teams will appear here when team management is
+                            connected.
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+                  </section>
+
+                  {isEmployee ? (
+                    <section className="activity-section employee-activity-section">
+                      <div className="activity-column">
+                        <div className="activity-heading">
+                          <div>
+                            <span className="section-label">MY ACTIVITY</span>
+                            <h2>Recent activity</h2>
+                          </div>
+
+                          <span className="activity-count">
+                            {totalDecisions} item
+                            {totalDecisions === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        <div className="activity-list">
+                          {totalDecisions > 0 ? (
+                            <>
+                              <div className="activity-row">
+                                <div className="activity-status draft" />
+
+                                <div className="activity-info">
+                                  <strong>My draft decisions</strong>
+                                  <span>
+                                    {draftCount} currently in progress
+                                  </span>
+                                </div>
+
+                                <span className="activity-time">
+                                  {draftCount} item{draftCount === 1 ? "" : "s"}
+                                </span>
+                              </div>
+
+                              <div className="activity-row">
+                                <div className="activity-status approved" />
+
+                                <div className="activity-info">
+                                  <strong>Approved decisions</strong>
+                                  <span>Decisions completed successfully</span>
+                                </div>
+
+                                <span className="activity-time">
+                                  {approvedCount} item
+                                  {approvedCount === 1 ? "" : "s"}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="activity-row">
+                              <div className="activity-status approved" />
+
+                              <div className="activity-info">
+                                <strong>No recent activity</strong>
+                                <span>
+                                  Create a decision to start building your
+                                  workspace.
+                                </span>
+                              </div>
+
+                              <span className="activity-time">Ready</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="activity-section">
+                      <div className="activity-column">
+                        <div className="activity-heading">
+                          <div>
+                            <span className="section-label">
+                              NEEDS ATTENTION
+                            </span>
+                            <h2>Decision activity</h2>
+                          </div>
+
+                          <span className="activity-count">
+                            {reviewCount + draftCount} items
+                          </span>
+                        </div>
+
+                        <div className="activity-list">
+                          {reviewCount > 0 && (
+                            <div className="activity-row">
+                              <div className="activity-status review" />
+
+                              <div className="activity-info">
+                                <strong>Decisions under review</strong>
+                                <span>Review required</span>
+                              </div>
+
+                              <span className="activity-time">
+                                {reviewCount} item
+                                {reviewCount === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                          )}
+
+                          {draftCount > 0 && (
+                            <div className="activity-row">
+                              <div className="activity-status draft" />
+
+                              <div className="activity-info">
+                                <strong>Draft decisions</strong>
+                                <span>Still in development</span>
+                              </div>
+
+                              <span className="activity-time">
+                                {draftCount} item
+                                {draftCount === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                          )}
+
+                          {reviewCount === 0 && draftCount === 0 && (
+                            <div className="activity-row">
+                              <div className="activity-status approved" />
+
+                              <div className="activity-info">
+                                <strong>Workspace is clear</strong>
+                                <span>No pending decision actions</span>
+                              </div>
+
+                              <span className="activity-time">Done</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="activity-column">
+                        <div className="activity-heading">
+                          <div>
+                            <span className="section-label">UPCOMING</span>
+                            <h2>
+                              {isReviewer
+                                ? "Pending reviews"
+                                : isManager
+                                  ? "Pending approvals"
+                                  : "Review oversight"}
+                            </h2>
+                          </div>
+
+                          <button
+                            className="view-all"
+                            type="button"
+                            onClick={() => handlePageChange("Reviews")}
+                          >
+                            View all
+                            <ChevronRight size={15} />
+                          </button>
+                        </div>
+
+                        <div className="activity-list">
+                          {reviewCount > 0 ? (
+                            <div className="activity-row">
+                              <div className="review-date">
+                                <strong>{reviewCount}</strong>
+                                <span>OPEN</span>
+                              </div>
+
+                              <div className="activity-info">
+                                <strong>
+                                  {isManager
+                                    ? "Pending decision approvals"
+                                    : "Pending decision reviews"}
+                                </strong>
+                                <span>
+                                  {isAdministrator
+                                    ? "Organization review oversight"
+                                    : "Review workflow"}
+                                </span>
+                              </div>
+
+                              <span className="activity-time">Now</span>
+                            </div>
+                          ) : (
+                            <div className="activity-row">
+                              <div className="review-date">
+                                <strong>—</strong>
+                                <span>CLEAR</span>
+                              </div>
+
+                              <div className="activity-info">
+                                <strong>No pending reviews</strong>
+                                <span>
+                                  {isManager
+                                    ? "No approvals currently waiting"
+                                    : "You're all caught up"}
+                                </span>
+                              </div>
+
+                              <span className="activity-time">Done</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  <section className="insight-card">
+                    <div className="insight-icon">
+                      <Sparkles size={20} />
+                    </div>
+
+                    <div className="insight-content">
+                      <span>DECISIONVAULT INSIGHT</span>
+
+                      <h3>Your decisions are becoming a knowledge graph.</h3>
+
+                      <p>
+                        Connect assumptions, evidence and outcomes to make
+                        future decisions easier to understand.
+                      </p>
+                    </div>
+
+                    <button
+                      className="insight-button"
+                      type="button"
+                      onClick={() => handlePageChange("Knowledge")}
+                    >
+                      Explore knowledge
+                      <ChevronRight size={16} />
+                    </button>
+                  </section>
+                </>
+              )}
+
+              {showDecisionsPage && (
+                <section className="workspace-page">
+                  <div className="workspace-page-header">
+                    <div>
+                      <span className="section-label">DECISION WORKSPACE</span>
+
+                      <h1>All decisions</h1>
+
+                      <p>Manage every decision stored in your workspace.</p>
+                    </div>
+
+                    <button
+                      className="new-decision-button"
+                      type="button"
+                      onClick={openCreateDecision}
+                    >
+                      <span>+</span>
+                      New decision
+                    </button>
                   </div>
 
-                  <div className="decision-table-head">
-                    <span>Title</span>
-                    <span>Team</span>
-                    <span>Status</span>
-                    <span>Created on</span>
-                    <span>Actions</span>
+                  <div className="workspace-toolbar">
+                    <span>
+                      {filteredDecisions.length} result
+                      {filteredDecisions.length === 1 ? "" : "s"}
+                    </span>
+
+                    {searchQuery && (
+                      <button type="button" onClick={() => setSearchQuery("")}>
+                        Clear search
+                      </button>
+                    )}
                   </div>
 
-                  <div className="decision-list">
+                  <div className="workspace-decisions-list">
                     {loading ? (
                       <div className="empty-search-state">
                         <Clock3 size={18} />
@@ -1355,15 +2065,15 @@ function Dashboard() {
                           Try again
                         </button>
                       </div>
-                    ) : recentDecisions.length > 0 ? (
-                      recentDecisions.map((decision) => {
+                    ) : filteredDecisions.length > 0 ? (
+                      filteredDecisions.map((decision) => {
                         const Icon = decision.icon;
 
                         const statusClass = getStatusClass(decision.status);
 
                         return (
                           <div
-                            className="decision-row decision-table-row"
+                            className="workspace-decision-card"
                             key={decision.id}
                           >
                             <div className="decision-left">
@@ -1374,13 +2084,9 @@ function Dashboard() {
                               <div className="decision-info">
                                 <strong>{decision.name}</strong>
 
-                                <span>{decision.team}</span>
+                                <span>{decision.problemStatement}</span>
                               </div>
                             </div>
-
-                            <span className="decision-team">
-                              {decision.team}
-                            </span>
 
                             <span className={`status status-${statusClass}`}>
                               <span />
@@ -1396,7 +2102,6 @@ function Dashboard() {
                                 className="decision-view-button"
                                 type="button"
                                 onClick={() => openDecision(decision)}
-                                aria-label={`View ${decision.name}`}
                               >
                                 View
                               </button>
@@ -1404,51 +2109,11 @@ function Dashboard() {
                               <button
                                 className="decision-more"
                                 type="button"
-                                onClick={() =>
-                                  setMoreMenu(
-                                    moreMenu === decision.name
-                                      ? null
-                                      : decision.name,
-                                  )
-                                }
-                                aria-label={`More options for ${decision.name}`}
+                                onClick={() => openEditDecision(decision)}
+                                aria-label={`Edit ${decision.name}`}
                               >
                                 <MoreHorizontal size={16} />
                               </button>
-
-                              {moreMenu === decision.name && (
-                                <div className="decision-more-menu">
-                                  <button
-                                    type="button"
-                                    onClick={() => openDecision(decision)}
-                                  >
-                                    Open
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditDecision(decision)}
-                                  >
-                                    Edit
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDeleteDecision(decision)
-                                    }
-                                  >
-                                    Delete
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => setMoreMenu(null)}
-                                  >
-                                    Close menu
-                                  </button>
-                                </div>
-                              )}
                             </div>
                           </div>
                         );
@@ -1460,561 +2125,94 @@ function Dashboard() {
                         <strong>No decisions found</strong>
 
                         <span>
-                          {searchQuery
-                            ? "Try a different search term."
-                            : "Create your first decision to get started."}
+                          Create a new decision or adjust your search.
                         </span>
 
-                        {!searchQuery && (
-                          <button type="button" onClick={openCreateDecision}>
-                            Create decision
-                          </button>
-                        )}
+                        <button type="button" onClick={openCreateDecision}>
+                          Create decision
+                        </button>
                       </div>
                     )}
-                  </div>
-
-                  <button
-                    className="decision-list-footer"
-                    type="button"
-                    onClick={() => handlePageChange("Decisions")}
-                  >
-                    View all decisions
-                    <ChevronRight size={15} />
-                  </button>
-                </section>
-
-                <section className="activity-column team-activity-column">
-                  <div className="activity-heading">
-                    <div>
-                      <span className="section-label">TEAM ACTIVITY</span>
-
-                      <h2>What’s happening</h2>
-                    </div>
-
-                    <button
-                      className="view-all"
-                      type="button"
-                      onClick={() => handlePageChange("Discussions")}
-                    >
-                      View all
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-
-                  <div className="team-activity-list">
-                    <div className="dashboard-empty-state">
-                      <div className="dashboard-empty-icon">
-                        <Users size={18} />
-                      </div>
-
-                      <strong>No team activity yet</strong>
-
-                      <span>
-                        Team activity will appear here once collaboration
-                        features are connected.
-                      </span>
-                    </div>
-                  </div>
-                </section>
-              </section>
-
-              <section className="dashboard-lower-grid">
-                <section className="status-card-panel">
-                  <div className="lower-card-header">
-                    <div>
-                      <span className="section-label">OVERVIEW</span>
-
-                      <h2>Decisions by status</h2>
-                    </div>
-                  </div>
-
-                  <div className="status-chart-layout">
-                    <div className="decision-donut" style={donutStyle}>
-                      <div className="decision-donut-center">
-                        <strong>{totalDecisions}</strong>
-
-                        <span>Total</span>
-                      </div>
-                    </div>
-
-                    <div className="status-legend">
-                      <div>
-                        <span className="legend-dot legend-draft" />
-                        <span>Draft</span>
-
-                        <strong>
-                          {draftCount} ({statusPercent(draftCount)}
-                          %)
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="legend-dot legend-review" />
-                        <span>Under review</span>
-
-                        <strong>
-                          {reviewCount} ({statusPercent(reviewCount)}
-                          %)
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="legend-dot legend-approved" />
-                        <span>Approved</span>
-
-                        <strong>
-                          {approvedCount} ({statusPercent(approvedCount)}
-                          %)
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="legend-dot legend-rejected" />
-                        <span>Rejected</span>
-
-                        <strong>
-                          {rejectedCount} ({statusPercent(rejectedCount)}
-                          %)
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="lower-panel">
-                  <div className="lower-card-header">
-                    <div>
-                      <span className="section-label">TEAM CONVERSATIONS</span>
-
-                      <h2>Recent discussions</h2>
-                    </div>
-
-                    <button
-                      className="view-all"
-                      type="button"
-                      onClick={() => handlePageChange("Discussions")}
-                    >
-                      View all
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-
-                  <div className="discussion-list">
-                    <div className="dashboard-empty-state">
-                      <div className="dashboard-empty-icon">
-                        <MessageCircle size={18} />
-                      </div>
-
-                      <strong>No discussions yet</strong>
-
-                      <span>
-                        Discussions will appear here when a decision has an
-                        active conversation.
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="lower-panel">
-                  <div className="lower-card-header">
-                    <div>
-                      <span className="section-label">WORKSPACES</span>
-
-                      <h2>My teams</h2>
-                    </div>
-
-                    <button
-                      className="view-all"
-                      type="button"
-                      onClick={() => handlePageChange("Teams")}
-                    >
-                      View all
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-
-                  <div className="team-list">
-                    <div className="dashboard-empty-state">
-                      <div className="dashboard-empty-icon">
-                        <Users size={18} />
-                      </div>
-
-                      <strong>No teams yet</strong>
-
-                      <span>
-                        Teams will appear here when team management is
-                        connected.
-                      </span>
-                    </div>
-                  </div>
-                </section>
-              </section>
-
-              {isEmployee ? (
-                <section className="activity-section employee-activity-section">
-                  <div className="activity-column">
-                    <div className="activity-heading">
-                      <div>
-                        <span className="section-label">MY ACTIVITY</span>
-                        <h2>Recent activity</h2>
-                      </div>
-
-                      <span className="activity-count">
-                        {totalDecisions} item{totalDecisions === 1 ? "" : "s"}
-                      </span>
-                    </div>
-
-                    <div className="activity-list">
-                      {totalDecisions > 0 ? (
-                        <>
-                          <div className="activity-row">
-                            <div className="activity-status draft" />
-
-                            <div className="activity-info">
-                              <strong>My draft decisions</strong>
-                              <span>{draftCount} currently in progress</span>
-                            </div>
-
-                            <span className="activity-time">
-                              {draftCount} item{draftCount === 1 ? "" : "s"}
-                            </span>
-                          </div>
-
-                          <div className="activity-row">
-                            <div className="activity-status approved" />
-
-                            <div className="activity-info">
-                              <strong>Approved decisions</strong>
-                              <span>Decisions completed successfully</span>
-                            </div>
-
-                            <span className="activity-time">
-                              {approvedCount} item
-                              {approvedCount === 1 ? "" : "s"}
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="activity-row">
-                          <div className="activity-status approved" />
-
-                          <div className="activity-info">
-                            <strong>No recent activity</strong>
-                            <span>
-                              Create a decision to start building your
-                              workspace.
-                            </span>
-                          </div>
-
-                          <span className="activity-time">Ready</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              ) : (
-                <section className="activity-section">
-                  <div className="activity-column">
-                    <div className="activity-heading">
-                      <div>
-                        <span className="section-label">NEEDS ATTENTION</span>
-                        <h2>Decision activity</h2>
-                      </div>
-
-                      <span className="activity-count">
-                        {reviewCount + draftCount} items
-                      </span>
-                    </div>
-
-                    <div className="activity-list">
-                      {reviewCount > 0 && (
-                        <div className="activity-row">
-                          <div className="activity-status review" />
-
-                          <div className="activity-info">
-                            <strong>Decisions under review</strong>
-                            <span>Review required</span>
-                          </div>
-
-                          <span className="activity-time">
-                            {reviewCount} item
-                            {reviewCount === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      )}
-
-                      {draftCount > 0 && (
-                        <div className="activity-row">
-                          <div className="activity-status draft" />
-
-                          <div className="activity-info">
-                            <strong>Draft decisions</strong>
-                            <span>Still in development</span>
-                          </div>
-
-                          <span className="activity-time">
-                            {draftCount} item
-                            {draftCount === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      )}
-
-                      {reviewCount === 0 && draftCount === 0 && (
-                        <div className="activity-row">
-                          <div className="activity-status approved" />
-
-                          <div className="activity-info">
-                            <strong>Workspace is clear</strong>
-                            <span>No pending decision actions</span>
-                          </div>
-
-                          <span className="activity-time">Done</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="activity-column">
-                    <div className="activity-heading">
-                      <div>
-                        <span className="section-label">UPCOMING</span>
-                        <h2>
-                          {isReviewer
-                            ? "Pending reviews"
-                            : isManager
-                              ? "Pending approvals"
-                              : "Review oversight"}
-                        </h2>
-                      </div>
-
-                      <button
-                        className="view-all"
-                        type="button"
-                        onClick={() => handlePageChange("Reviews")}
-                      >
-                        View all
-                        <ChevronRight size={15} />
-                      </button>
-                    </div>
-
-                    <div className="activity-list">
-                      {reviewCount > 0 ? (
-                        <div className="activity-row">
-                          <div className="review-date">
-                            <strong>{reviewCount}</strong>
-                            <span>OPEN</span>
-                          </div>
-
-                          <div className="activity-info">
-                            <strong>
-                              {isManager
-                                ? "Pending decision approvals"
-                                : "Pending decision reviews"}
-                            </strong>
-                            <span>
-                              {isAdministrator
-                                ? "Organization review oversight"
-                                : "Review workflow"}
-                            </span>
-                          </div>
-
-                          <span className="activity-time">Now</span>
-                        </div>
-                      ) : (
-                        <div className="activity-row">
-                          <div className="review-date">
-                            <strong>—</strong>
-                            <span>CLEAR</span>
-                          </div>
-
-                          <div className="activity-info">
-                            <strong>No pending reviews</strong>
-                            <span>
-                              {isManager
-                                ? "No approvals currently waiting"
-                                : "You're all caught up"}
-                            </span>
-                          </div>
-
-                          <span className="activity-time">Done</span>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </section>
               )}
 
-              <section className="insight-card">
-                <div className="insight-icon">
-                  <Sparkles size={20} />
-                </div>
-
-                <div className="insight-content">
-                  <span>DECISIONVAULT INSIGHT</span>
-
-                  <h3>Your decisions are becoming a knowledge graph.</h3>
-
-                  <p>
-                    Connect assumptions, evidence and outcomes to make future
-                    decisions easier to understand.
-                  </p>
-                </div>
-
-                <button
-                  className="insight-button"
-                  type="button"
-                  onClick={() => handlePageChange("Knowledge")}
-                >
-                  Explore knowledge
-                  <ChevronRight size={16} />
-                </button>
-              </section>
-            </>
-          )}
-
-          {showDecisionsPage && (
-            <section className="workspace-page">
-              <div className="workspace-page-header">
-                <div>
-                  <span className="section-label">DECISION WORKSPACE</span>
-
-                  <h1>All decisions</h1>
-
-                  <p>Manage every decision stored in your workspace.</p>
-                </div>
-
-                <button
-                  className="new-decision-button"
-                  type="button"
-                  onClick={openCreateDecision}
-                >
-                  <span>+</span>
-                  New decision
-                </button>
-              </div>
-
-              <div className="workspace-toolbar">
-                <span>
-                  {filteredDecisions.length} result
-                  {filteredDecisions.length === 1 ? "" : "s"}
-                </span>
-
-                {searchQuery && (
-                  <button type="button" onClick={() => setSearchQuery("")}>
-                    Clear search
-                  </button>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Reviews" && (
+                  <ReviewsPage
+                    apiRequest={apiRequest}
+                    decisions={decisions}
+                    openDecision={openDecision}
+                    currentUser={currentUser}
+                  />
                 )}
-              </div>
 
-              <div className="workspace-decisions-list">
-                {loading ? (
-                  <div className="empty-search-state">
-                    <Clock3 size={18} />
-
-                    <strong>Loading decisions</strong>
-
-                    <span>Fetching your workspace data.</span>
-                  </div>
-                ) : error ? (
-                  <div className="empty-search-state">
-                    <X size={18} />
-
-                    <strong>Unable to load decisions</strong>
-
-                    <span>{error}</span>
-
-                    <button type="button" onClick={fetchDecisions}>
-                      Try again
-                    </button>
-                  </div>
-                ) : filteredDecisions.length > 0 ? (
-                  filteredDecisions.map((decision) => {
-                    const Icon = decision.icon;
-
-                    const statusClass = getStatusClass(decision.status);
-
-                    return (
-                      <div
-                        className="workspace-decision-card"
-                        key={decision.id}
-                      >
-                        <div className="decision-left">
-                          <div className="decision-icon">
-                            <Icon size={17} />
-                          </div>
-
-                          <div className="decision-info">
-                            <strong>{decision.name}</strong>
-
-                            <span>{decision.problemStatement}</span>
-                          </div>
-                        </div>
-
-                        <span className={`status status-${statusClass}`}>
-                          <span />
-                          {decision.status}
-                        </span>
-
-                        <span className="decision-date">
-                          {decision.created}
-                        </span>
-
-                        <div className="decision-actions">
-                          <button
-                            className="decision-view-button"
-                            type="button"
-                            onClick={() => openDecision(decision)}
-                          >
-                            View
-                          </button>
-
-                          <button
-                            className="decision-more"
-                            type="button"
-                            onClick={() => openEditDecision(decision)}
-                            aria-label={`Edit ${decision.name}`}
-                          >
-                            <MoreHorizontal size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="empty-search-state">
-                    <Search size={18} />
-
-                    <strong>No decisions found</strong>
-
-                    <span>Create a new decision or adjust your search.</span>
-
-                    <button type="button" onClick={openCreateDecision}>
-                      Create decision
-                    </button>
-                  </div>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Knowledge" && (
+                  <KnowledgePage apiRequest={apiRequest} />
                 )}
-              </div>
-            </section>
-          )}
 
-          {!showOverview && !showDecisionsPage && (
-            <section className="placeholder-page">
-              <span className="section-label">WORKSPACE</span>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Teams" && (
+                  <TeamsPage
+                    apiRequest={apiRequest}
+                    currentUser={currentUser}
+                  />
+                )}
 
-              <h1>{activePage}</h1>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Discussions" && (
+                  <DiscussionsPage apiRequest={apiRequest} />
+                )}
 
-              <p>
-                This workspace is ready for its dedicated DecisionVault module.
-              </p>
-            </section>
-          )}
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Documents" && (
+                  <DocumentsPage apiRequest={apiRequest} />
+                )}
 
-          <footer className="dashboard-footer">
-            <span>DecisionVault</span>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Analytics" && (
+                  <AnalyticsPage apiRequest={apiRequest} />
+                )}
 
-            <span>Decisions, preserved.</span>
-          </footer>
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Reports" && (
+                  <ReportsPage apiRequest={apiRequest} />
+                )}
+
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Users" && <UsersPage apiRequest={apiRequest} />}
+
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Audit & Compliance" && (
+                  <AuditPage apiRequest={apiRequest} />
+                )}
+
+              {!showOverview &&
+                !showDecisionsPage &&
+                activePage === "Settings" && (
+                  <SettingsPage
+                    currentUser={currentUser}
+                    apiRequest={apiRequest}
+                    onUserUpdated={setCurrentUser}
+                  />
+                )}
+            </div>
+            <footer className="dashboard-footer">
+              <span>DecisionVault</span>
+
+              <span>Decisions, preserved.</span>
+            </footer>
+          </div>
         </div>
       </main>
 
@@ -2081,6 +2279,27 @@ function Dashboard() {
                         })
                       }
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="decision-team">Team workspace</label>
+                    <select
+                      id="decision-team"
+                      value={decisionForm.teamId}
+                      onChange={(event) =>
+                        setDecisionForm({
+                          ...decisionForm,
+                          teamId: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="">No team assigned</option>
+                      {availableTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="modal-actions">
@@ -2150,6 +2369,27 @@ function Dashboard() {
                         })
                       }
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="edit-decision-team">Team workspace</label>
+                    <select
+                      id="edit-decision-team"
+                      value={decisionForm.teamId}
+                      onChange={(event) =>
+                        setDecisionForm({
+                          ...decisionForm,
+                          teamId: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="">No team assigned</option>
+                      {availableTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="form-group">
@@ -2267,6 +2507,10 @@ function Dashboard() {
                       {(selectedDecision.discussions || []).length}
                     </strong>
                   </div>
+                  <div>
+                    <span>Approvals</span>
+                    <strong>{(selectedDecision.approvals || []).length}</strong>
+                  </div>
                 </div>
 
                 <div
@@ -2279,6 +2523,8 @@ function Dashboard() {
                     ["alternatives", "Alternatives", Database],
                     ["documents", "Documents", FileText],
                     ["discussion", "Discussion", MessageCircle],
+                    ["approvals", "Approvals", ShieldCheck],
+                    ["history", "History", GitBranch],
                   ].map(([value, label, Icon]) => (
                     <button
                       key={value}
@@ -2627,6 +2873,31 @@ function Dashboard() {
                             </small>
                           </span>
                         </label>
+                        <div className="document-upload-fields">
+                          <select
+                            value={documentCategory}
+                            onChange={(event) =>
+                              setDocumentCategory(event.target.value)
+                            }
+                          >
+                            <option>General</option>
+                            <option>Research</option>
+                            <option>Evaluation</option>
+                            <option>Requirements</option>
+                            <option>Architecture</option>
+                            <option>Security</option>
+                            <option>Compliance</option>
+                            <option>Planning</option>
+                            <option>Deployment</option>
+                          </select>
+                          <input
+                            value={documentTags}
+                            onChange={(event) =>
+                              setDocumentTags(event.target.value)
+                            }
+                            placeholder="Tags: AI, research, architecture"
+                          />
+                        </div>
                         <button
                           className="modal-primary"
                           type="button"
@@ -2680,6 +2951,74 @@ function Dashboard() {
                         )}
                       </div>
                     </div>
+                  )}
+
+                  {decisionTab === "history" && (
+                    <div className="decision-tab-content">
+                      <div className="tab-content-header">
+                        <div>
+                          <div className="panel-kicker">VERSION HISTORY</div>
+                          <h3>Decision changes</h3>
+                        </div>
+                        <span className="count-pill">
+                          {(selectedDecision.versions || []).length}
+                        </span>
+                      </div>
+                      <div className="version-history-list">
+                        {(selectedDecision.versions || []).length ? (
+                          (selectedDecision.versions || []).map((version) => (
+                            <article
+                              className="version-history-card"
+                              key={version.id}
+                            >
+                              <div className="version-history-number">
+                                v{version.version}
+                              </div>
+                              <div className="version-history-copy">
+                                <strong>{version.title}</strong>
+                                <span>
+                                  {version.changedBy?.name ||
+                                    "Workspace member"}{" "}
+                                  · {formatDecisionDate(version.createdAt)}
+                                </span>
+                                <small>
+                                  {displayStatus(version.status)} ·{" "}
+                                  {version.problemStatement}
+                                </small>
+                              </div>
+                            </article>
+                          ))
+                        ) : (
+                          <div className="empty-module-state">
+                            <GitBranch size={18} />
+                            <strong>No version history yet</strong>
+                            <span>
+                              Changes to the decision will be recorded here.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {decisionTab === "approvals" && (
+                    <ApprovalPanel
+                      apiRequest={apiRequest}
+                      selectedDecision={selectedDecision}
+                      currentUser={currentUser}
+                      users={availableUsers}
+                      onDecisionRefresh={async () => {
+                        if (!selectedDecision?.id) return;
+                        const refreshed = await apiRequest(
+                          `/api/decisions/${selectedDecision.id}`,
+                        );
+                        setSelectedDecision(
+                          refreshed?.decision || selectedDecision,
+                        );
+                        await fetchDecisions();
+                        await fetchNotifications();
+                      }}
+                    />
                   )}
 
                   {decisionTab === "discussion" && (
