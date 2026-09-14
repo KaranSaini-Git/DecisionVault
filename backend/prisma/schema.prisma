@@ -12,44 +12,47 @@ datasource db {
   provider = "postgresql"
 }
 
-model User{
-  id Int @id @default(autoincrement())
-  name String
-  email String @unique
+model User {
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
   password String
-  role Role
+  role     Role
 
-  decisions Decision []
-  discussions Discussion[]
+  decisions          Decision[]
+  discussions        Discussion[]
+  approvalsToReview  Approval[]   @relation("ApprovalReviewer")
+  approvalsRequested Approval[]   @relation("ApprovalRequester")
 }
 
- model Decision{
-  id Int @id @default(autoincrement())
-  title String
+model Decision {
+  id               Int            @id @default(autoincrement())
+  title            String
   problemStatement String
-  status DecisionStatus @default(Draft)
-  createdById Int
-  createdBy User @relation(fields: [createdById], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  alternatives Alternative[]
-  documents Document[]
-  discussions Discussion[]
- }
+  status           DecisionStatus @default(Draft)
+  createdById      Int
+  createdBy        User           @relation(fields: [createdById], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  alternatives     Alternative[]
+  documents        Document[]
+  discussions      Discussion[]
+  approvals        Approval[]
+}
 
- model Alternative {
-  id Int @id @default(autoincrement())
-  name String
+model Alternative {
+  id          Int      @id @default(autoincrement())
+  name        String
   pros        String
   cons        String
   cost        String
   feasibility String
   risk        String
-  decisionId Int
-  decision   Decision @relation(fields: [decisionId], references: [id])
- }
+  decisionId  Int
+  decision    Decision @relation(fields: [decisionId], references: [id])
+}
 
- model Document {
+model Document {
   id         Int      @id @default(autoincrement())
   filename   String
   filePath   String
@@ -59,10 +62,10 @@ model User{
 }
 
 enum Role {
-    Employee
-    Reviewer
-    Manager
-    Administrator
+  Employee
+  Reviewer
+  Manager
+  Administrator
 }
 
 enum DecisionStatus {
@@ -80,33 +83,60 @@ enum DiscussionType {
 }
 
 model Discussion {
-  id          Int            @id @default(autoincrement())
-  content     String
-  type        DiscussionType @default(Comment)
+  id      Int            @id @default(autoincrement())
+  content String
+  type    DiscussionType @default(Comment)
 
-  decisionId  Int
-  decision    Decision       @relation(fields: [decisionId], references: [id])
+  decisionId Int
+  decision   Decision @relation(fields: [decisionId], references: [id])
 
   createdById Int
-  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdBy   User @relation(fields: [createdById], references: [id])
 
-  parentId    Int?
-  parent      Discussion?    @relation("DiscussionThread", fields: [parentId], references: [id], onDelete: SetNull)
-  replies     Discussion[]   @relation("DiscussionThread")
+  parentId Int?
+  parent   Discussion?  @relation("DiscussionThread", fields: [parentId], references: [id], onDelete: SetNull)
+  replies  Discussion[] @relation("DiscussionThread")
 
   attachments DiscussionAttachment[]
 
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model DiscussionAttachment {
-  id           Int        @id @default(autoincrement())
-  filename     String
-  filePath     String
+  id       Int    @id @default(autoincrement())
+  filename String
+  filePath String
 
   discussionId Int
   discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime   @default(now())
+  createdAt DateTime @default(now())
+}
+
+enum ApprovalStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+model Approval {
+  id            Int            @id @default(autoincrement())
+  decisionId    Int
+  reviewerId    Int
+  requestedById Int
+  level         Int            @default(1)
+  status        ApprovalStatus @default(Pending)
+  comments      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  actedAt       DateTime?
+
+  decision    Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  reviewer    User     @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  requestedBy User     @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, reviewerId, level])
+  @@index([decisionId])
+  @@index([reviewerId, status])
 }

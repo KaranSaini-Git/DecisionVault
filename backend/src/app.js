@@ -6,6 +6,7 @@ import decisionRouter from "./routes/decisionRouter.js"
 import alternativeRouter from "./routes/alterantiveRoutes.js";
 import documentRouter from "./routes/documentRoutes.js";
 import discussionRouter from "./routes/discussionRoutes.js";
+import approvalRouter from "./routes/approvalRoutes.js";
 
 const app = new express();
 
@@ -18,5 +19,6 @@ app.use("/api/decisions", decisionRouter)
 app.use("/api/decisions", alternativeRouter)
 app.use("/api/decisions", documentRouter);
 app.use("/api", discussionRouter);
+app.use("/api", approvalRouter);
 
 export default app;
