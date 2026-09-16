@@ -7834,3 +7834,571 @@ select:focus-visible {
     align-items: start;
   }
 }
+/* =========================================================
+   DECISIONVAULT — WORKSPACE PAGES
+   Match the Overview visual system.
+   IMPORTANT:
+   Overview is intentionally excluded.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   DESKTOP
+   --------------------------------------------------------- */
+
+@media (min-width: 761px) {
+  /*
+    Keep the normal dashboard shell identical to the
+    Overview shell proportions.
+  */
+
+  .dashboard:not(.overview-dashboard) .dashboard-content {
+    width: 100%;
+    height: 100vh;
+    min-height: 0;
+    padding: 25px 34px 22px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .dashboard:not(.overview-dashboard) .dashboard-topbar {
+    flex: 0 0 auto;
+    margin-bottom: 22px;
+  }
+
+  /*
+    Every module becomes one large rounded workspace
+    container, just like the Overview container.
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-page,
+  .dashboard:not(.overview-dashboard) .full-module-page,
+  .dashboard:not(.overview-dashboard) .placeholder-page {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+
+    padding: 30px;
+
+    border: 1px solid rgba(16, 21, 18, 0.07);
+    border-radius: 24px;
+
+    background: rgba(255, 255, 255, 0.82);
+
+    box-shadow: 0 18px 50px rgba(25, 45, 32, 0.055);
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    scrollbar-width: thin;
+    scrollbar-color: #d7ded9 transparent;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page::-webkit-scrollbar,
+  .dashboard:not(.overview-dashboard) .full-module-page::-webkit-scrollbar,
+  .dashboard:not(.overview-dashboard) .placeholder-page::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page::-webkit-scrollbar-track,
+  .dashboard:not(.overview-dashboard)
+    .full-module-page::-webkit-scrollbar-track,
+  .dashboard:not(.overview-dashboard)
+    .placeholder-page::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page::-webkit-scrollbar-thumb,
+  .dashboard:not(.overview-dashboard)
+    .full-module-page::-webkit-scrollbar-thumb,
+  .dashboard:not(.overview-dashboard)
+    .placeholder-page::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: #d7ded9;
+  }
+
+  /*
+    Remove the old smaller standalone card treatment.
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-page {
+    margin: 0;
+  }
+
+  /*
+    Header
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header {
+    width: 100%;
+    min-height: 104px;
+
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+
+    gap: 24px;
+    margin-bottom: 22px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header > div {
+    min-width: 0;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header .section-label {
+    margin-bottom: 10px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header h1 {
+    margin: 0;
+
+    font-family: "Manrope", sans-serif;
+    font-size: clamp(32px, 3vw, 50px);
+    line-height: 1.02;
+    letter-spacing: -0.055em;
+
+    color: var(--dv-text);
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header p {
+    margin: 9px 0 0;
+
+    color: var(--dv-text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /*
+    Buttons in module headers should feel identical to
+    the Overview button treatment.
+  */
+
+  .dashboard:not(.overview-dashboard)
+    .workspace-page-header
+    .new-decision-button {
+    flex: 0 0 auto;
+  }
+
+  /*
+    Generic module statistics
+  */
+
+  .dashboard:not(.overview-dashboard) .module-stat-grid,
+  .dashboard:not(.overview-dashboard) .analytics-hero-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .dashboard:not(.overview-dashboard) .module-stat-card,
+  .dashboard:not(.overview-dashboard) .analytics-hero-card {
+    min-width: 0;
+    min-height: 112px;
+
+    padding: 18px;
+
+    border: 1px solid var(--dv-border);
+    border-radius: 17px;
+
+    background: #fff;
+
+    box-shadow: 0 9px 24px rgba(18, 33, 24, 0.025);
+  }
+
+  .dashboard:not(.overview-dashboard) .module-stat-card:hover,
+  .dashboard:not(.overview-dashboard) .analytics-hero-card:hover {
+    border-color: var(--dv-border-green);
+  }
+
+  /*
+    Generic inner cards
+  */
+
+  .dashboard:not(.overview-dashboard) .review-module-card,
+  .dashboard:not(.overview-dashboard) .module-form-card,
+  .dashboard:not(.overview-dashboard) .knowledge-primary-panel,
+  .dashboard:not(.overview-dashboard) .knowledge-side-card,
+  .dashboard:not(.overview-dashboard) .team-panel-card,
+  .dashboard:not(.overview-dashboard) .analytics-panel,
+  .dashboard:not(.overview-dashboard) .report-card,
+  .dashboard:not(.overview-dashboard) .settings-card,
+  .dashboard:not(.overview-dashboard) .discussion-module-card,
+  .dashboard:not(.overview-dashboard) .global-document-row,
+  .dashboard:not(.overview-dashboard) .audit-row,
+  .dashboard:not(.overview-dashboard) .users-table {
+    border: 1px solid var(--dv-border);
+    border-radius: 17px;
+    background: #fff;
+    box-shadow: 0 9px 24px rgba(18, 33, 24, 0.025);
+  }
+
+  /*
+    Team cards
+  */
+
+  .dashboard:not(.overview-dashboard) .team-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .dashboard:not(.overview-dashboard) .team-overview-card {
+    min-width: 0;
+
+    padding: 17px;
+
+    border: 1px solid var(--dv-border);
+    border-radius: 17px;
+
+    background: #fff;
+
+    box-shadow: 0 9px 24px rgba(18, 33, 24, 0.025);
+  }
+
+  .dashboard:not(.overview-dashboard) .team-overview-card:hover,
+  .dashboard:not(.overview-dashboard) .team-overview-card.active {
+    border-color: var(--dv-border-green);
+    box-shadow: 0 12px 26px rgba(23, 107, 58, 0.07);
+  }
+
+  /*
+    Decisions list
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-decisions-list {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-decision-card {
+    width: 100%;
+    min-width: 0;
+
+    border: 1px solid var(--dv-border);
+    border-radius: 15px;
+
+    background: #fff;
+
+    box-shadow: 0 6px 18px rgba(18, 33, 24, 0.022);
+
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-decision-card:hover {
+    border-color: var(--dv-border-green);
+    box-shadow: 0 10px 24px rgba(18, 33, 24, 0.035);
+    transform: translateY(-1px);
+  }
+
+  /*
+    Knowledge repository
+  */
+
+  .dashboard:not(.overview-dashboard) .knowledge-header {
+    margin-bottom: 14px;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-tabs {
+    margin-bottom: 14px;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.75fr);
+    gap: 14px;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-primary-panel,
+  .dashboard:not(.overview-dashboard) .knowledge-side-card {
+    min-width: 0;
+    padding: 15px;
+  }
+
+  /*
+    Search bars
+  */
+
+  .dashboard:not(.overview-dashboard) .inline-search {
+    max-width: 440px;
+  }
+
+  .dashboard:not(.overview-dashboard) .inline-search input {
+    width: 100%;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--dv-border);
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-toolbar .inline-search {
+    flex: 1 1 250px;
+  }
+
+  /*
+    Discussion / document / review cards
+  */
+
+  .dashboard:not(.overview-dashboard) .discussion-module-card,
+  .dashboard:not(.overview-dashboard) .global-document-row,
+  .dashboard:not(.overview-dashboard) .audit-row,
+  .dashboard:not(.overview-dashboard) .review-module-card {
+    width: 100%;
+  }
+
+  /*
+    Empty states
+  */
+
+  .dashboard:not(.overview-dashboard) .module-empty-state,
+  .dashboard:not(.overview-dashboard) .module-error-state,
+  .dashboard:not(.overview-dashboard) .empty-state,
+  .dashboard:not(.overview-dashboard) .module-inline-empty,
+  .dashboard:not(.overview-dashboard) .empty-search-state {
+    border-radius: 17px;
+    background: var(--dv-surface-soft);
+  }
+
+  /*
+    Tables
+  */
+
+  .dashboard:not(.overview-dashboard) .users-table,
+  .dashboard:not(.overview-dashboard) .users-table-head,
+  .dashboard:not(.overview-dashboard) .users-table-row {
+    width: 100%;
+  }
+
+  /*
+    Reports / settings
+  */
+
+  .dashboard:not(.overview-dashboard) .report-card-grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  /*
+    Keep the footer visually identical to Overview.
+  */
+
+  .dashboard:not(.overview-dashboard) .dashboard-footer {
+    flex: 0 0 auto;
+    margin-top: 16px;
+    padding: 0 2px;
+  }
+}
+
+/* ---------------------------------------------------------
+   TABLET
+   --------------------------------------------------------- */
+
+@media (max-width: 1180px) and (min-width: 761px) {
+  .dashboard:not(.overview-dashboard) .module-stat-grid,
+  .dashboard:not(.overview-dashboard) .analytics-hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard:not(.overview-dashboard) .team-card-grid,
+  .dashboard:not(.overview-dashboard) .knowledge-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------
+   MOBILE
+   --------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  .dashboard:not(.overview-dashboard) .dashboard-content {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+
+    padding: 86px 15px 28px;
+
+    display: block;
+    overflow: visible;
+  }
+
+  .dashboard:not(.overview-dashboard) .dashboard-topbar {
+    margin-bottom: 23px;
+  }
+
+  /*
+    Mobile module shell
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-page,
+  .dashboard:not(.overview-dashboard) .full-module-page,
+  .dashboard:not(.overview-dashboard) .placeholder-page {
+    width: 100%;
+    min-height: calc(100vh - 140px);
+
+    padding: 22px;
+
+    border-radius: 22px;
+
+    overflow: visible;
+  }
+
+  /*
+    Module header
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header {
+    min-height: 0;
+
+    align-items: flex-start;
+    flex-direction: column;
+
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header h1 {
+    font-size: 36px;
+    line-height: 1.04;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header p {
+    font-size: 13px;
+  }
+
+  .dashboard:not(.overview-dashboard)
+    .workspace-page-header
+    .new-decision-button {
+    width: 100%;
+  }
+
+  /*
+    Responsive grids
+  */
+
+  .dashboard:not(.overview-dashboard) .module-stat-grid,
+  .dashboard:not(.overview-dashboard) .analytics-hero-grid,
+  .dashboard:not(.overview-dashboard) .team-card-grid,
+  .dashboard:not(.overview-dashboard) .knowledge-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard:not(.overview-dashboard) .knowledge-toolbar .inline-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  /*
+    Cards
+  */
+
+  .dashboard:not(.overview-dashboard) .module-stat-card,
+  .dashboard:not(.overview-dashboard) .analytics-hero-card,
+  .dashboard:not(.overview-dashboard) .review-module-card,
+  .dashboard:not(.overview-dashboard) .module-form-card,
+  .dashboard:not(.overview-dashboard) .knowledge-primary-panel,
+  .dashboard:not(.overview-dashboard) .knowledge-side-card,
+  .dashboard:not(.overview-dashboard) .team-panel-card,
+  .dashboard:not(.overview-dashboard) .analytics-panel,
+  .dashboard:not(.overview-dashboard) .report-card,
+  .dashboard:not(.overview-dashboard) .settings-card,
+  .dashboard:not(.overview-dashboard) .discussion-module-card,
+  .dashboard:not(.overview-dashboard) .global-document-row,
+  .dashboard:not(.overview-dashboard) .audit-row {
+    border-radius: 17px;
+  }
+
+  /*
+    Decision cards
+  */
+
+  .dashboard:not(.overview-dashboard) .workspace-decision-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-decision-card .decision-date {
+    display: none;
+  }
+
+  /*
+    Footer
+  */
+
+  .dashboard:not(.overview-dashboard) .dashboard-footer {
+    margin-top: 16px;
+  }
+}
+
+/* ---------------------------------------------------------
+   SMALL MOBILE
+   --------------------------------------------------------- */
+
+@media (max-width: 520px) {
+  .dashboard:not(.overview-dashboard) .dashboard-content {
+    padding-right: 11px;
+    padding-left: 11px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page,
+  .dashboard:not(.overview-dashboard) .full-module-page,
+  .dashboard:not(.overview-dashboard) .placeholder-page {
+    padding: 16px;
+    border-radius: 17px;
+  }
+
+  .dashboard:not(.overview-dashboard) .workspace-page-header h1 {
+    font-size: 32px;
+  }
+
+  .dashboard:not(.overview-dashboard) .module-stat-card,
+  .dashboard:not(.overview-dashboard) .analytics-hero-card {
+    padding: 16px;
+  }
+
+  .dashboard:not(.overview-dashboard) .team-card-grid {
+    gap: 10px;
+  }
+}
+
+/* ---------------------------------------------------------
+   IMPORTANT OVERRIDE
+   Remove the old artificial full-module height restriction.
+   --------------------------------------------------------- */
+
+@media (min-width: 761px) {
+  .dashboard:not(.overview-dashboard) .workspace-page.full-module-page {
+    max-height: none;
+    height: auto;
+  }
+}
