@@ -156,38 +156,80 @@ function Dashboard() {
       throw new Error("Authentication required");
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        ...(options.body && !(options.body instanceof FormData)
-          ? {
-              "Content-Type": "application/json",
-            }
-          : {}),
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const method = (options.method || "GET").toUpperCase();
+    const maxAttempts = method === "GET" ? 3 : 1;
 
-    let data = null;
+    let lastError = null;
 
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${path}`, {
+          ...options,
+          headers: {
+            ...(options.body && !(options.body instanceof FormData)
+              ? {
+                  "Content-Type": "application/json",
+                }
+              : {}),
+            ...(options.headers || {}),
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        let data = null;
+
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
+        if (response.status === 401) {
+          handleUnauthorized();
+
+          throw new Error("Your session has expired. Please sign in again.");
+        }
+
+        const isTransientServerError = [502, 503, 504].includes(
+          response.status,
+        );
+
+        if (!response.ok) {
+          const error = new Error(data?.message || "Something went wrong.");
+          error.isTransient = isTransientServerError;
+
+          if (isTransientServerError && attempt < maxAttempts) {
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, 1200 * attempt),
+            );
+            continue;
+          }
+
+          throw error;
+        }
+
+        return data;
+      } catch (requestError) {
+        lastError = requestError;
+
+        const isNetworkError =
+          requestError instanceof TypeError ||
+          requestError?.message === "Failed to fetch";
+
+        const isTransientError =
+          isNetworkError || requestError?.isTransient === true;
+
+        if (!isTransientError || attempt >= maxAttempts) {
+          throw requestError;
+        }
+
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 1200 * attempt),
+        );
+      }
     }
 
-    if (response.status === 401) {
-      handleUnauthorized();
-
-      throw new Error("Your session has expired. Please sign in again.");
-    }
-
-    if (!response.ok) {
-      throw new Error(data?.message || "Something went wrong.");
-    }
-
-    return data;
+    throw lastError || new Error("Unable to connect to the server.");
   };
 
   const getDecisionIcon = (title = "") => {
@@ -377,10 +419,32 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDecisions();
-    fetchCurrentUser();
-    fetchNotifications();
-    fetchDashboardKnowledge();
+    let cancelled = false;
+
+    const loadDashboard = async () => {
+      // Wake the backend and establish the current session first.
+      // The remaining dashboard requests start only after this initial
+      // request has had a chance to bring the Render free instance online.
+      await fetchCurrentUser();
+
+      if (cancelled) {
+        return;
+      }
+
+      await Promise.all([
+        fetchDecisions(),
+        fetchNotifications(),
+        fetchDashboardKnowledge(),
+      ]);
+    };
+
+    loadDashboard().catch((loadError) => {
+      console.error("Dashboard initialization error:", loadError);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
