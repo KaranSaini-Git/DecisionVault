@@ -4,8 +4,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "backend": "nodemon --exec \"node --env-file=.env server.js\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "build": "prisma generate"
   },
   "keywords": [],
   "type": "module",

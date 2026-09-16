@@ -1,5 +1,6 @@
 import prisma from "../db/prisma.js";
-import { logActivity } from "../services/activityService.js";
+import { createNotification, logActivity } from "../services/activityService.js";
+import { canManageDecision } from "../services/authorizationService.js";
 
 const VALID_STATUSES = ["Draft", "UnderReview", "Approved", "Rejected", "Archived"];
 const getUserId = (req) => req.user?.userId;
@@ -47,17 +48,46 @@ const createDecision = async (req, res) => {
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ message: "Invalid decision status" });
 
     const resolvedTeamId = await resolveTeam(teamId, userId);
+
+    let workflowReviewer = null;
+    if (req.user.role === "Employee") {
+      workflowReviewer = await prisma.user.findFirst({
+        where: {
+          role: "Reviewer",
+          id: { not: userId },
+          ...(resolvedTeamId ? { teamMemberships: { some: { teamId: resolvedTeamId } } } : {}),
+        },
+        select: { id: true, name: true, email: true, role: true },
+        orderBy: { id: "asc" },
+      });
+
+      if (!workflowReviewer) {
+        workflowReviewer = await prisma.user.findFirst({
+          where: { role: "Reviewer", id: { not: userId } },
+          select: { id: true, name: true, email: true, role: true },
+          orderBy: { id: "asc" },
+        });
+      }
+
+      if (!workflowReviewer) {
+        return res.status(409).json({ message: "No Reviewer is available to start the approval workflow." });
+      }
+    }
+
+    const initialStatus = req.user.role === "Employee" ? "UnderReview" : status;
+
     const decision = await prisma.$transaction(async (tx) => {
       const created = await tx.decision.create({
         data: {
           title: title.trim(),
           problemStatement: problemStatement.trim(),
-          status,
+          status: initialStatus,
           createdById: userId,
           teamId: resolvedTeamId,
         },
         include: { createdBy: { select: { id: true, name: true, email: true, role: true } }, alternatives: true, team: { select: { id: true, name: true } } },
       });
+
       await tx.decisionVersion.create({
         data: {
           decisionId: created.id,
@@ -68,11 +98,44 @@ const createDecision = async (req, res) => {
           changedById: userId,
         },
       });
+
+      if (workflowReviewer) {
+        await tx.approval.create({
+          data: {
+            decisionId: created.id,
+            reviewerId: workflowReviewer.id,
+            requestedById: userId,
+            level: 1,
+            status: "Pending",
+          },
+        });
+      }
+
       return created;
     });
 
     await logActivity({ userId, action: "DECISION_CREATED", entityType: "Decision", entityId: decision.id, decisionId: decision.id, teamId: decision.teamId, metadata: { title: decision.title } });
-    res.status(201).json({ message: "Decision created successfully", decision });
+
+    if (workflowReviewer) {
+      await createNotification({
+        userId: workflowReviewer.id,
+        type: "APPROVAL_REQUESTED",
+        title: "New decision awaiting review",
+        message: `${decision.title} was submitted by ${req.user.name || "a team member"} and is waiting for your review.`,
+        entityType: "Decision",
+        entityId: decision.id,
+      });
+      await logActivity({
+        userId,
+        action: "APPROVAL_REQUESTED",
+        entityType: "Approval",
+        decisionId: decision.id,
+        teamId: decision.teamId,
+        metadata: { reviewerId: workflowReviewer.id, level: 1, automatic: true },
+      });
+    }
+
+    res.status(201).json({ message: workflowReviewer ? "Decision created and sent to a reviewer" : "Decision created successfully", decision });
   } catch (error) {
     console.error("Create decision error:", error);
     res.status(500).json({ message: "Failed to create decision" });
@@ -126,10 +189,11 @@ const updateDecision = async (req, res) => {
     if (!userId) return res.status(401).json({ message: "Authentication required" });
     if (!decisionId) return res.status(400).json({ message: "Invalid decision ID" });
 
-    const existingDecision = ["Manager", "Administrator"].includes(req.user.role)
-      ? await prisma.decision.findUnique({ where: { id: decisionId } })
-      : await getOwnedDecision(decisionId, userId);
+    const existingDecision = await prisma.decision.findUnique({ where: { id: decisionId } });
     if (!existingDecision) return res.status(404).json({ message: "Decision not found" });
+    if (!(await canManageDecision(existingDecision, req.user))) {
+      return res.status(403).json({ message: "You do not have permission to edit this decision" });
+    }
 
     const { title, problemStatement, status, teamId } = req.body;
     const data = {};
@@ -144,7 +208,7 @@ const updateDecision = async (req, res) => {
     }
     if (status !== undefined) {
       if (!VALID_STATUSES.includes(status)) return res.status(400).json({ message: "Invalid decision status" });
-      data.status = status;
+      if (status !== existingDecision.status) return res.status(403).json({ message: "Decision status is controlled by the approval workflow" });
     }
     if (teamId !== undefined) data.teamId = await resolveTeam(teamId, userId);
     if (!Object.keys(data).length) return res.status(400).json({ message: "No changes provided" });
@@ -170,10 +234,11 @@ const deleteDecision = async (req, res) => {
     if (!userId) return res.status(401).json({ message: "Authentication required" });
     if (!decisionId) return res.status(400).json({ message: "Invalid decision ID" });
 
-    const existingDecision = ["Manager", "Administrator"].includes(req.user.role)
-      ? await prisma.decision.findUnique({ where: { id: decisionId } })
-      : await getOwnedDecision(decisionId, userId);
+    const existingDecision = await prisma.decision.findUnique({ where: { id: decisionId } });
     if (!existingDecision) return res.status(404).json({ message: "Decision not found" });
+    if (!(await canManageDecision(existingDecision, req.user))) {
+      return res.status(403).json({ message: "You do not have permission to delete this decision" });
+    }
 
     await prisma.decision.delete({ where: { id: decisionId } });
     await logActivity({ userId, action: "DECISION_DELETED", entityType: "Decision", entityId: decisionId, teamId: existingDecision.teamId, metadata: { title: existingDecision.title } });

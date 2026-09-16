@@ -9,7 +9,7 @@ function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("Employee");
+  const [role] = useState("Employee");
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async (event) => {
@@ -18,7 +18,8 @@ function Register() {
     try {
       setLoading(true);
 
-      const response = await fetch("http://localhost:4000/api/auth/register", {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+      const response = await fetch(`${apiBaseUrl}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -121,13 +122,11 @@ function Register() {
 
               <select
                 id="register-role"
-                value={role}
-                onChange={(event) => setRole(event.target.value)}
+                value="Employee"
+                disabled
+                aria-disabled="true"
               >
                 <option value="Employee">Employee</option>
-                <option value="Manager">Manager</option>
-                <option value="Reviewer">Reviewer</option>
-                <option value="Administrator">Administrator</option>
               </select>
             </div>
 

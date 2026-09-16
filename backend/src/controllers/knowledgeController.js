@@ -62,7 +62,15 @@ const getKnowledge = async (req, res) => {
     if (tab === "decisions" || tab === "all") {
       decisions = await prisma.decision.findMany({
         where: decisionWhere,
-        include: { createdBy: { select: { id: true, name: true, role: true } }, team: { select: { id: true, name: true } }, _count: { select: { documents: true, discussions: true, alternatives: true } } },
+        include: {
+          createdBy: { select: { id: true, name: true, role: true } },
+          team: { select: { id: true, name: true } },
+          documents: {
+            include: { uploadedBy: { select: { id: true, name: true, role: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+          _count: { select: { documents: true, discussions: true, alternatives: true } },
+        },
         orderBy: { updatedAt: "desc" },
         take: tab === "all" ? 8 : pageSize,
         skip: tab === "all" ? 0 : (page - 1) * pageSize,

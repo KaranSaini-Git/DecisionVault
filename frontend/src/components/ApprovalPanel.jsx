@@ -38,7 +38,18 @@ function ApprovalPanel({ apiRequest, selectedDecision, currentUser, users, onDec
     load();
   }, [selectedDecision?.id]);
 
-  const canRequest = selectedDecision?.createdById === currentUser?.id || ["Manager", "Administrator"].includes(currentUser?.role);
+  const myPendingApproval = approvals.find(
+    (approval) =>
+      approval.status === "Pending" &&
+      approval.reviewerId === currentUser?.id,
+  );
+
+  const canRequest = ["Manager", "Administrator"].includes(
+    currentUser?.role,
+  );
+  const canAct =
+    (currentUser?.role === "Reviewer" && myPendingApproval?.level === 1) ||
+    (currentUser?.role === "Manager" && myPendingApproval?.level === 2);
 
   const request = async (event) => {
     event.preventDefault();
@@ -61,10 +72,9 @@ function ApprovalPanel({ apiRequest, selectedDecision, currentUser, users, onDec
   };
 
   const latest = approvals.length ? approvals[approvals.length - 1] : null;
-  const myPendingApproval = approvals.find((approval) => approval.status === "Pending" && approval.reviewerId === currentUser?.id);
 
   const act = async (status) => {
-    if (!myPendingApproval) return;
+    if (!myPendingApproval || !canAct) return;
     try {
       setActing(status);
       await apiRequest(`/api/approvals/${myPendingApproval.id}`, {
@@ -88,7 +98,7 @@ function ApprovalPanel({ apiRequest, selectedDecision, currentUser, users, onDec
         <div><strong>{selectedDecision?.status === "UnderReview" ? "Approval in progress" : selectedDecision?.status}</strong><span>{selectedDecision?.status === "UnderReview" ? "This decision is waiting for one or more assigned reviewers." : "Approval history and reviewer activity for this decision."}</span></div>
       </div>
 
-      {myPendingApproval && (
+      {myPendingApproval && canAct && (
         <div className="approval-review-panel">
           <div><div className="panel-kicker">YOUR REVIEW</div><h3>Decision assigned to you</h3><p>Complete this approval directly from the decision workspace.</p></div>
           <textarea rows="3" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Optional review comment..." />

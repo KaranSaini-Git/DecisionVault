@@ -1,5 +1,6 @@
 import prisma from "../db/prisma.js";
 import { logActivity, createNotification } from "../services/activityService.js";
+import { canManageTeam, MANAGE_TEAM_ROLES } from "../services/authorizationService.js";
 
 const teamInclude = {
   members: {
@@ -159,6 +160,11 @@ const getTeam = async (req, res) => {
 
 const createTeam = async (req, res) => {
   try {
+    const role = String(req.user.role || "").trim().toLowerCase();
+    if (!["manager", "administrator"].includes(role)) {
+      return res.status(403).json({ message: "Only managers and administrators can create teams" });
+    }
+
     const userId = req.user.userId;
     const { name, description = "" } = req.body;
 
@@ -168,7 +174,7 @@ const createTeam = async (req, res) => {
       data: {
         name: name.trim(),
         description: description.trim(),
-        members: { create: { userId, teamRole: req.user.role === "Manager" ? "Manager" : "Owner" } },
+        members: { create: { userId, teamRole: role === "manager" ? "Manager" : "Owner" } },
       },
       include: teamInclude,
     });
@@ -197,10 +203,14 @@ const addTeamMember = async (req, res) => {
 
     if (!Number.isInteger(teamId) || !Number.isInteger(userId)) return res.status(400).json({ message: "Invalid team or user ID" });
 
-    const existing = await requireTeamAccess(teamId, req.user.userId);
-    const managerAccess = ["Manager", "Administrator"].includes(req.user.role);
-    const memberManageAccess = existing && ["Owner", "Lead"].includes(existing.teamRole);
-    if (!managerAccess && !memberManageAccess) return res.status(403).json({ message: "You do not have permission to manage this team" });
+    const validTeamRoles = ["Member", "Lead", "Manager"];
+    if (!validTeamRoles.includes(teamRole)) {
+      return res.status(400).json({ message: "Invalid team role" });
+    }
+
+    if (!(await canManageTeam(teamId, req.user))) {
+      return res.status(403).json({ message: "You do not have permission to manage this team" });
+    }
 
     const member = await prisma.teamMember.create({
       data: { teamId, userId, teamRole },
@@ -237,11 +247,23 @@ const removeTeamMember = async (req, res) => {
   try {
     const teamId = Number(req.params.teamId);
     const userId = Number(req.params.userId);
-    const managerAccess = ["Manager", "Administrator"].includes(req.user.role);
+    if (!(await canManageTeam(teamId, req.user))) {
+      return res.status(403).json({ message: "You do not have permission to manage this team" });
+    }
 
-    const existing = await requireTeamAccess(teamId, req.user.userId);
-    const memberManageAccess = existing && ["Owner", "Lead"].includes(existing.teamRole);
-    if (!managerAccess && !memberManageAccess) return res.status(403).json({ message: "You do not have permission to manage this team" });
+    const targetMembership = await requireTeamAccess(teamId, userId);
+    if (!targetMembership) return res.status(404).json({ message: "Team member not found" });
+
+    const remainingManagers = await prisma.teamMember.count({
+      where: {
+        teamId,
+        id: { not: targetMembership.id },
+        teamRole: { in: MANAGE_TEAM_ROLES },
+      },
+    });
+    if (remainingManagers === 0) {
+      return res.status(409).json({ message: "A team must retain at least one team manager" });
+    }
 
     await prisma.teamMember.delete({
       where: { teamId_userId: { teamId, userId } },

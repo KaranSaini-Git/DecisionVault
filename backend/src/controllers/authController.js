@@ -18,13 +18,15 @@ const register = async (req, res) => {
       return res.status(409).json({ message: "Email already exists" });
     }
 
+    // Public self-registration must never grant a privileged role.
+    const role = "Employee";
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        role: "Employee",
+        role,
       },
       select: { id: true, name: true, email: true, role: true },
     });
@@ -54,7 +56,7 @@ const login = async (req, res) => {
     const token = jwt.sign(
       { userId: existingUser.id, role: existingUser.role },
       process.env.JWT_SECRET,
-      { expiresIn: "8h" },
+      { expiresIn: "24h" },
     );
 
     await logActivity({ userId: existingUser.id, action: "USER_LOGGED_IN", entityType: "User", entityId: existingUser.id });

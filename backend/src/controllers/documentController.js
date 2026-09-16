@@ -1,5 +1,6 @@
 import prisma from "../db/prisma.js";
 import { logActivity } from "../services/activityService.js";
+import { canManageDecision } from "../services/authorizationService.js";
 
 const uploadDocument = async (req, res) => {
   try {
@@ -9,6 +10,9 @@ const uploadDocument = async (req, res) => {
 
     const decision = await prisma.decision.findUnique({ where: { id: decisionId }, select: { id: true, teamId: true } });
     if (!decision) return res.status(404).json({ message: "Decision not found" });
+    if (!(await canManageDecision(decision, req.user))) {
+      return res.status(403).json({ message: "You do not have permission to upload documents to this decision" });
+    }
 
     const document = await prisma.document.create({
       data: {

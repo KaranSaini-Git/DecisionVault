@@ -111,6 +111,7 @@ function Dashboard() {
   const [availableUsers, setAvailableUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [dashboardDocumentCount, setDashboardDocumentCount] = useState(0);
 
   const normalizedRole = (currentUser?.role || "Employee").trim().toLowerCase();
 
@@ -347,6 +348,20 @@ function Dashboard() {
     }
   };
 
+  const fetchDashboardKnowledge = async () => {
+    try {
+      const data = await apiRequest(
+        "/api/knowledge?tab=documents&page=1&pageSize=5",
+      );
+      setDashboardDocumentCount(
+        Number(data?.stats?.documents ?? data?.pagination?.total ?? 0),
+      );
+    } catch (error) {
+      console.error("Fetch dashboard knowledge error:", error);
+      setDashboardDocumentCount(0);
+    }
+  };
+
   const fetchCurrentUser = async () => {
     try {
       setUserLoading(true);
@@ -365,6 +380,7 @@ function Dashboard() {
     fetchDecisions();
     fetchCurrentUser();
     fetchNotifications();
+    fetchDashboardKnowledge();
   }, []);
 
   useEffect(() => {
@@ -389,7 +405,7 @@ function Dashboard() {
     return decisions.map((decision) => ({
       ...decision,
       name: decision.title,
-      team: decision.createdBy?.team || "My Workspace",
+      team: decision.team?.name || "Unassigned",
       status: displayStatus(decision.status),
       created: formatDecisionDate(decision.createdAt),
       relativeCreated: formatRelativeTime(decision.createdAt),
@@ -438,6 +454,42 @@ function Dashboard() {
     (decision) => decision.status === "Rejected",
   ).length;
 
+  const myTeams = useMemo(
+    () =>
+      availableTeams.filter(
+        (team) =>
+          team.userMembership ||
+          currentUser?.teamMemberships?.some(
+            (membership) => membership.teamId === team.id,
+          ),
+      ),
+    [availableTeams, currentUser],
+  );
+
+  const canManageDecision = (decision) => {
+    if (!decision || !currentUser?.id) return false;
+    if (isAdministrator) return true;
+    if (
+      Number(decision.createdById || decision.createdBy?.id) ===
+      Number(currentUser.id)
+    )
+      return true;
+    if (isManager && decision.teamId) {
+      const team = availableTeams.find(
+        (item) => Number(item.id) === Number(decision.teamId),
+      );
+      const membershipRole =
+        team?.userMembership?.teamRole ||
+        currentUser.teamMemberships?.find(
+          (membership) => Number(membership.teamId) === Number(decision.teamId),
+        )?.teamRole;
+      return ["Owner", "Manager", "Lead"].includes(membershipRole);
+    }
+    return false;
+  };
+
+  const canManageSelectedDecision = canManageDecision(selectedDecision);
+
   const approvalRate = totalDecisions
     ? Math.round((approvedCount / totalDecisions) * 100)
     : 0;
@@ -456,6 +508,12 @@ function Dashboard() {
 
   const handlePageChange = (page) => {
     setActivePage(page);
+
+    // The top search is scoped to the page the user is currently viewing.
+    // Clear it when navigating so a search from one module cannot hide all
+    // records in another module. Each module keeps its own local search state.
+    setSearchQuery("");
+
     setMobileOpen(false);
     setProfileOpen(false);
     setNotificationsOpen(false);
@@ -998,6 +1056,10 @@ function Dashboard() {
       }
     : undefined;
 
+  const pendingApprovalDecision = dashboardDecisions.find(
+    (decision) => decision.status === "Under Review",
+  );
+
   return (
     <div className={`dashboard ${showOverview ? "overview-dashboard" : ""}`}>
       <div className="dashboard-grid" />
@@ -1263,764 +1325,30 @@ function Dashboard() {
             )}
           </header>
 
-          <div className="workspace-shell-card">
-            <div className="workspace-shell-scroll">
-              {showOverview && (
-                <>
-                  <section className="welcome-section">
-                    <div>
-                      <div className="welcome-eyebrow">
-                        <Sparkles size={13} />
-                        Decision intelligence
-                      </div>
-
-                      <h1>
-                        Welcome back
-                        {firstName !== "there" ? `, ${firstName}` : ""}.
-                      </h1>
-
-                      <p>{roleDashboardCopy}</p>
-                    </div>
-
-                    <div className="welcome-actions">
-                      <span className="dashboard-date">
-                        {new Intl.DateTimeFormat("en-IN", {
-                          weekday: "long",
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        }).format(new Date())}
-                      </span>
-
-                      <button
-                        className="new-decision-button"
-                        type="button"
-                        onClick={openCreateDecision}
-                      >
-                        <span>+</span>
-                        New decision
-                      </button>
-                    </div>
-                  </section>
-
-                  <section className="stats-grid stats-grid-five">
-                    <button
-                      className="stat-card stat-button-card"
-                      type="button"
-                      onClick={() => handlePageChange("Decisions")}
-                    >
-                      <div className="stat-top">
-                        <div className="stat-icon">
-                          <BarChart3 size={18} />
-                        </div>
-
-                        <span className="stat-period">All time</span>
-                      </div>
-
-                      <p>Total decisions</p>
-
-                      <div className="stat-value">{totalDecisions}</div>
-
-                      <div className="stat-footer">
-                        <span>{dashboardDecisions.length}</span>
-
-                        <span>tracked now</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="stat-card stat-button-card"
-                      type="button"
-                      onClick={() => setSearchQuery("Draft")}
-                    >
-                      <div className="stat-top">
-                        <div className="stat-icon draft-stat-icon">
-                          <FileText size={18} />
-                        </div>
-
-                        <span className="stat-period">Active</span>
-                      </div>
-
-                      <p>Draft</p>
-
-                      <div className="stat-value">{draftCount}</div>
-
-                      <div className="stat-footer">
-                        <span>Needs attention</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="stat-card stat-button-card"
-                      type="button"
-                      onClick={() => setSearchQuery("Under Review")}
-                    >
-                      <div className="stat-top">
-                        <div className="stat-icon review-stat-icon">
-                          <Clock3 size={18} />
-                        </div>
-
-                        <span className="stat-period">Active</span>
-                      </div>
-
-                      <p>Under review</p>
-
-                      <div className="stat-value">{reviewCount}</div>
-
-                      <div className="stat-footer">
-                        <span>In progress</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="stat-card stat-button-card"
-                      type="button"
-                      onClick={() => setSearchQuery("Approved")}
-                    >
-                      <div className="stat-top">
-                        <div className="stat-icon success-icon">
-                          <CheckCircle2 size={18} />
-                        </div>
-
-                        <span className="stat-period">Completed</span>
-                      </div>
-
-                      <p>Approved</p>
-
-                      <div className="stat-value">{approvedCount}</div>
-
-                      <div className="stat-footer">
-                        <span className="positive">{approvalRate}%</span>
-
-                        <span>approval rate</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="stat-card stat-button-card"
-                      type="button"
-                      onClick={() => setSearchQuery("Rejected")}
-                    >
-                      <div className="stat-top">
-                        <div className="stat-icon rejected-stat-icon">
-                          <X size={18} />
-                        </div>
-
-                        <span className="stat-period">Action</span>
-                      </div>
-
-                      <p>Rejected</p>
-
-                      <div className="stat-value">{rejectedCount}</div>
-
-                      <div className="stat-footer">
-                        <span>Requires changes</span>
-                      </div>
-                    </button>
-                  </section>
-
-                  <section className="dashboard-primary-grid">
-                    <section className="recent-section">
-                      <div className="recent-header">
-                        <div>
-                          <span className="section-label">DECISION LOG</span>
-
-                          <h2>Recent decisions</h2>
-                        </div>
-
-                        <div className="recent-actions">
-                          <button
-                            className="view-all"
-                            type="button"
-                            onClick={() => handlePageChange("Decisions")}
-                          >
-                            View all
-                            <ChevronRight size={15} />
-                          </button>
-
-                          <button
-                            className="compact-action"
-                            type="button"
-                            onClick={openCreateDecision}
-                          >
-                            <span>+</span>
-                            Create decision
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="decision-table-head">
-                        <span>Title</span>
-                        <span>Team</span>
-                        <span>Status</span>
-                        <span>Created on</span>
-                        <span>Actions</span>
-                      </div>
-
-                      <div className="decision-list">
-                        {loading ? (
-                          <div className="empty-search-state">
-                            <Clock3 size={18} />
-
-                            <strong>Loading decisions</strong>
-
-                            <span>Fetching your workspace data.</span>
-                          </div>
-                        ) : error ? (
-                          <div className="empty-search-state">
-                            <X size={18} />
-
-                            <strong>Unable to load decisions</strong>
-
-                            <span>{error}</span>
-
-                            <button type="button" onClick={fetchDecisions}>
-                              Try again
-                            </button>
-                          </div>
-                        ) : recentDecisions.length > 0 ? (
-                          recentDecisions.map((decision) => {
-                            const Icon = decision.icon;
-
-                            const statusClass = getStatusClass(decision.status);
-
-                            return (
-                              <div
-                                className="decision-row decision-table-row"
-                                key={decision.id}
-                              >
-                                <div className="decision-left">
-                                  <div className="decision-icon">
-                                    <Icon size={17} />
-                                  </div>
-
-                                  <div className="decision-info">
-                                    <strong>{decision.name}</strong>
-
-                                    <span>{decision.team}</span>
-                                  </div>
-                                </div>
-
-                                <span className="decision-team">
-                                  {decision.team}
-                                </span>
-
-                                <span
-                                  className={`status status-${statusClass}`}
-                                >
-                                  <span />
-                                  {decision.status}
-                                </span>
-
-                                <span className="decision-date">
-                                  {decision.created}
-                                </span>
-
-                                <div className="decision-actions">
-                                  <button
-                                    className="decision-view-button"
-                                    type="button"
-                                    onClick={() => openDecision(decision)}
-                                    aria-label={`View ${decision.name}`}
-                                  >
-                                    View
-                                  </button>
-
-                                  <button
-                                    className="decision-more"
-                                    type="button"
-                                    onClick={() =>
-                                      setMoreMenu(
-                                        moreMenu === decision.name
-                                          ? null
-                                          : decision.name,
-                                      )
-                                    }
-                                    aria-label={`More options for ${decision.name}`}
-                                  >
-                                    <MoreHorizontal size={16} />
-                                  </button>
-
-                                  {moreMenu === decision.name && (
-                                    <div className="decision-more-menu">
-                                      <button
-                                        type="button"
-                                        onClick={() => openDecision(decision)}
-                                      >
-                                        Open
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          openEditDecision(decision)
-                                        }
-                                      >
-                                        Edit
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleDeleteDecision(decision)
-                                        }
-                                      >
-                                        Delete
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => setMoreMenu(null)}
-                                      >
-                                        Close menu
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="empty-search-state">
-                            <Search size={18} />
-
-                            <strong>No decisions found</strong>
-
-                            <span>
-                              {searchQuery
-                                ? "Try a different search term."
-                                : "Create your first decision to get started."}
-                            </span>
-
-                            {!searchQuery && (
-                              <button
-                                type="button"
-                                onClick={openCreateDecision}
-                              >
-                                Create decision
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <button
-                        className="decision-list-footer"
-                        type="button"
-                        onClick={() => handlePageChange("Decisions")}
-                      >
-                        View all decisions
-                        <ChevronRight size={15} />
-                      </button>
-                    </section>
-
-                    <section className="activity-column team-activity-column">
-                      <div className="activity-heading">
-                        <div>
-                          <span className="section-label">TEAM ACTIVITY</span>
-
-                          <h2>What’s happening</h2>
-                        </div>
-
-                        <button
-                          className="view-all"
-                          type="button"
-                          onClick={() => handlePageChange("Discussions")}
-                        >
-                          View all
-                          <ChevronRight size={15} />
-                        </button>
-                      </div>
-
-                      <div className="team-activity-list">
-                        <div className="dashboard-empty-state">
-                          <div className="dashboard-empty-icon">
-                            <Users size={18} />
-                          </div>
-
-                          <strong>No team activity yet</strong>
-
-                          <span>
-                            Team activity will appear here once collaboration
-                            features are connected.
-                          </span>
-                        </div>
-                      </div>
-                    </section>
-                  </section>
-
-                  <section className="dashboard-lower-grid">
-                    <section className="status-card-panel">
-                      <div className="lower-card-header">
-                        <div>
-                          <span className="section-label">OVERVIEW</span>
-
-                          <h2>Decisions by status</h2>
-                        </div>
-                      </div>
-
-                      <div className="status-chart-layout">
-                        <div className="decision-donut" style={donutStyle}>
-                          <div className="decision-donut-center">
-                            <strong>{totalDecisions}</strong>
-
-                            <span>Total</span>
-                          </div>
-                        </div>
-
-                        <div className="status-legend">
-                          <div>
-                            <span className="legend-dot legend-draft" />
-                            <span>Draft</span>
-
-                            <strong>
-                              {draftCount} ({statusPercent(draftCount)}
-                              %)
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span className="legend-dot legend-review" />
-                            <span>Under review</span>
-
-                            <strong>
-                              {reviewCount} ({statusPercent(reviewCount)}
-                              %)
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span className="legend-dot legend-approved" />
-                            <span>Approved</span>
-
-                            <strong>
-                              {approvedCount} ({statusPercent(approvedCount)}
-                              %)
-                            </strong>
-                          </div>
-
-                          <div>
-                            <span className="legend-dot legend-rejected" />
-                            <span>Rejected</span>
-
-                            <strong>
-                              {rejectedCount} ({statusPercent(rejectedCount)}
-                              %)
-                            </strong>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="lower-panel">
-                      <div className="lower-card-header">
-                        <div>
-                          <span className="section-label">
-                            TEAM CONVERSATIONS
-                          </span>
-
-                          <h2>Recent discussions</h2>
-                        </div>
-
-                        <button
-                          className="view-all"
-                          type="button"
-                          onClick={() => handlePageChange("Discussions")}
-                        >
-                          View all
-                          <ChevronRight size={15} />
-                        </button>
-                      </div>
-
-                      <div className="discussion-list">
-                        <div className="dashboard-empty-state">
-                          <div className="dashboard-empty-icon">
-                            <MessageCircle size={18} />
-                          </div>
-
-                          <strong>No discussions yet</strong>
-
-                          <span>
-                            Discussions will appear here when a decision has an
-                            active conversation.
-                          </span>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="lower-panel">
-                      <div className="lower-card-header">
-                        <div>
-                          <span className="section-label">WORKSPACES</span>
-
-                          <h2>My teams</h2>
-                        </div>
-
-                        <button
-                          className="view-all"
-                          type="button"
-                          onClick={() => handlePageChange("Teams")}
-                        >
-                          View all
-                          <ChevronRight size={15} />
-                        </button>
-                      </div>
-
-                      <div className="team-list">
-                        <div className="dashboard-empty-state">
-                          <div className="dashboard-empty-icon">
-                            <Users size={18} />
-                          </div>
-
-                          <strong>No teams yet</strong>
-
-                          <span>
-                            Teams will appear here when team management is
-                            connected.
-                          </span>
-                        </div>
-                      </div>
-                    </section>
-                  </section>
-
-                  {isEmployee ? (
-                    <section className="activity-section employee-activity-section">
-                      <div className="activity-column">
-                        <div className="activity-heading">
-                          <div>
-                            <span className="section-label">MY ACTIVITY</span>
-                            <h2>Recent activity</h2>
-                          </div>
-
-                          <span className="activity-count">
-                            {totalDecisions} item
-                            {totalDecisions === 1 ? "" : "s"}
-                          </span>
-                        </div>
-
-                        <div className="activity-list">
-                          {totalDecisions > 0 ? (
-                            <>
-                              <div className="activity-row">
-                                <div className="activity-status draft" />
-
-                                <div className="activity-info">
-                                  <strong>My draft decisions</strong>
-                                  <span>
-                                    {draftCount} currently in progress
-                                  </span>
-                                </div>
-
-                                <span className="activity-time">
-                                  {draftCount} item{draftCount === 1 ? "" : "s"}
-                                </span>
-                              </div>
-
-                              <div className="activity-row">
-                                <div className="activity-status approved" />
-
-                                <div className="activity-info">
-                                  <strong>Approved decisions</strong>
-                                  <span>Decisions completed successfully</span>
-                                </div>
-
-                                <span className="activity-time">
-                                  {approvedCount} item
-                                  {approvedCount === 1 ? "" : "s"}
-                                </span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="activity-row">
-                              <div className="activity-status approved" />
-
-                              <div className="activity-info">
-                                <strong>No recent activity</strong>
-                                <span>
-                                  Create a decision to start building your
-                                  workspace.
-                                </span>
-                              </div>
-
-                              <span className="activity-time">Ready</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </section>
-                  ) : (
-                    <section className="activity-section">
-                      <div className="activity-column">
-                        <div className="activity-heading">
-                          <div>
-                            <span className="section-label">
-                              NEEDS ATTENTION
-                            </span>
-                            <h2>Decision activity</h2>
-                          </div>
-
-                          <span className="activity-count">
-                            {reviewCount + draftCount} items
-                          </span>
-                        </div>
-
-                        <div className="activity-list">
-                          {reviewCount > 0 && (
-                            <div className="activity-row">
-                              <div className="activity-status review" />
-
-                              <div className="activity-info">
-                                <strong>Decisions under review</strong>
-                                <span>Review required</span>
-                              </div>
-
-                              <span className="activity-time">
-                                {reviewCount} item
-                                {reviewCount === 1 ? "" : "s"}
-                              </span>
-                            </div>
-                          )}
-
-                          {draftCount > 0 && (
-                            <div className="activity-row">
-                              <div className="activity-status draft" />
-
-                              <div className="activity-info">
-                                <strong>Draft decisions</strong>
-                                <span>Still in development</span>
-                              </div>
-
-                              <span className="activity-time">
-                                {draftCount} item
-                                {draftCount === 1 ? "" : "s"}
-                              </span>
-                            </div>
-                          )}
-
-                          {reviewCount === 0 && draftCount === 0 && (
-                            <div className="activity-row">
-                              <div className="activity-status approved" />
-
-                              <div className="activity-info">
-                                <strong>Workspace is clear</strong>
-                                <span>No pending decision actions</span>
-                              </div>
-
-                              <span className="activity-time">Done</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="activity-column">
-                        <div className="activity-heading">
-                          <div>
-                            <span className="section-label">UPCOMING</span>
-                            <h2>
-                              {isReviewer
-                                ? "Pending reviews"
-                                : isManager
-                                  ? "Pending approvals"
-                                  : "Review oversight"}
-                            </h2>
-                          </div>
-
-                          <button
-                            className="view-all"
-                            type="button"
-                            onClick={() => handlePageChange("Reviews")}
-                          >
-                            View all
-                            <ChevronRight size={15} />
-                          </button>
-                        </div>
-
-                        <div className="activity-list">
-                          {reviewCount > 0 ? (
-                            <div className="activity-row">
-                              <div className="review-date">
-                                <strong>{reviewCount}</strong>
-                                <span>OPEN</span>
-                              </div>
-
-                              <div className="activity-info">
-                                <strong>
-                                  {isManager
-                                    ? "Pending decision approvals"
-                                    : "Pending decision reviews"}
-                                </strong>
-                                <span>
-                                  {isAdministrator
-                                    ? "Organization review oversight"
-                                    : "Review workflow"}
-                                </span>
-                              </div>
-
-                              <span className="activity-time">Now</span>
-                            </div>
-                          ) : (
-                            <div className="activity-row">
-                              <div className="review-date">
-                                <strong>—</strong>
-                                <span>CLEAR</span>
-                              </div>
-
-                              <div className="activity-info">
-                                <strong>No pending reviews</strong>
-                                <span>
-                                  {isManager
-                                    ? "No approvals currently waiting"
-                                    : "You're all caught up"}
-                                </span>
-                              </div>
-
-                              <span className="activity-time">Done</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </section>
-                  )}
-
-                  <section className="insight-card">
-                    <div className="insight-icon">
-                      <Sparkles size={20} />
-                    </div>
-
-                    <div className="insight-content">
-                      <span>DECISIONVAULT INSIGHT</span>
-
-                      <h3>Your decisions are becoming a knowledge graph.</h3>
-
-                      <p>
-                        Connect assumptions, evidence and outcomes to make
-                        future decisions easier to understand.
-                      </p>
-                    </div>
-
-                    <button
-                      className="insight-button"
-                      type="button"
-                      onClick={() => handlePageChange("Knowledge")}
-                    >
-                      Explore knowledge
-                      <ChevronRight size={16} />
-                    </button>
-                  </section>
-                </>
-              )}
-
-              {showDecisionsPage && (
-                <section className="workspace-page">
-                  <div className="workspace-page-header">
-                    <div>
-                      <span className="section-label">DECISION WORKSPACE</span>
-
-                      <h1>All decisions</h1>
-
-                      <p>Manage every decision stored in your workspace.</p>
-                    </div>
-
+          {showOverview && (
+            <section className="overview-shell">
+              <div className="overview-scroll">
+                <section className="overview-hero">
+                  <div>
+                    <span className="section-label">
+                      YOUR DECISION WORKSPACE
+                    </span>
+                    <h1>
+                      Good evening
+                      {firstName !== "there" ? `, ${firstName}` : ""}.
+                    </h1>
+                    <p>{roleDashboardCopy}</p>
+                  </div>
+
+                  <div className="overview-hero-actions">
+                    <span className="overview-date">
+                      {new Intl.DateTimeFormat("en-IN", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      }).format(new Date())}
+                    </span>
                     <button
                       className="new-decision-button"
                       type="button"
@@ -2030,189 +1358,573 @@ function Dashboard() {
                       New decision
                     </button>
                   </div>
+                </section>
 
-                  <div className="workspace-toolbar">
-                    <span>
-                      {filteredDecisions.length} result
-                      {filteredDecisions.length === 1 ? "" : "s"}
-                    </span>
+                <section className="overview-stats-grid">
+                  <button
+                    className="overview-stat-card"
+                    type="button"
+                    onClick={() => handlePageChange("Decisions")}
+                  >
+                    <div className="overview-stat-icon overview-stat-icon-green">
+                      <FileText size={18} />
+                    </div>
+                    <div className="overview-stat-copy">
+                      <span>Total decisions</span>
+                      <strong>{totalDecisions}</strong>
+                      <small>
+                        <span className="overview-trend positive">↗ 20%</span>{" "}
+                        from last month
+                      </small>
+                    </div>
+                  </button>
 
-                    {searchQuery && (
-                      <button type="button" onClick={() => setSearchQuery("")}>
-                        Clear search
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    className="overview-stat-card"
+                    type="button"
+                    onClick={() => handlePageChange("Reviews")}
+                  >
+                    <div className="overview-stat-icon overview-stat-icon-amber">
+                      <Clock3 size={18} />
+                    </div>
+                    <div className="overview-stat-copy">
+                      <span>Pending approvals</span>
+                      <strong>{reviewCount}</strong>
+                      <small>
+                        <span
+                          className={`overview-trend ${reviewCount ? "warning" : "positive"}`}
+                        >
+                          ↑ {reviewCount ? "0" : "100"}%
+                        </span>{" "}
+                        requires review
+                      </small>
+                    </div>
+                  </button>
 
-                  <div className="workspace-decisions-list">
-                    {loading ? (
-                      <div className="empty-search-state">
-                        <Clock3 size={18} />
+                  <button
+                    className="overview-stat-card"
+                    type="button"
+                    onClick={() => handlePageChange("Teams")}
+                  >
+                    <div className="overview-stat-icon overview-stat-icon-green">
+                      <Users size={18} />
+                    </div>
+                    <div className="overview-stat-copy">
+                      <span>Active teams</span>
+                      <strong>{availableTeams.length}</strong>
+                      <small>
+                        <span className="overview-trend neutral">— 0%</span>{" "}
+                        across your workspace
+                      </small>
+                    </div>
+                  </button>
 
-                        <strong>Loading decisions</strong>
+                  <button
+                    className="overview-stat-card"
+                    type="button"
+                    onClick={() => handlePageChange("Documents")}
+                  >
+                    <div className="overview-stat-icon overview-stat-icon-blue">
+                      <FileText size={18} />
+                    </div>
+                    <div className="overview-stat-copy">
+                      <span>Documents</span>
+                      <strong>{dashboardDocumentCount}</strong>
+                      <small>
+                        <span className="overview-trend positive">↗ 100%</span>{" "}
+                        added this month
+                      </small>
+                    </div>
+                  </button>
+                </section>
 
-                        <span>Fetching your workspace data.</span>
-                      </div>
-                    ) : error ? (
-                      <div className="empty-search-state">
-                        <X size={18} />
-
-                        <strong>Unable to load decisions</strong>
-
-                        <span>{error}</span>
-
-                        <button type="button" onClick={fetchDecisions}>
-                          Try again
+                <section className="overview-main-grid">
+                  <div className="overview-main-left">
+                    <section className="overview-card overview-recent-card">
+                      <div className="overview-card-head">
+                        <h2>Recent decisions</h2>
+                        <button
+                          className="view-all"
+                          type="button"
+                          onClick={() => handlePageChange("Decisions")}
+                        >
+                          View all <ChevronRight size={15} />
                         </button>
                       </div>
-                    ) : filteredDecisions.length > 0 ? (
-                      filteredDecisions.map((decision) => {
-                        const Icon = decision.icon;
 
-                        const statusClass = getStatusClass(decision.status);
+                      <div className="overview-table-head">
+                        <span>Title</span>
+                        <span>Status</span>
+                        <span>Team</span>
+                        <span>Last updated</span>
+                        <span>Actions</span>
+                      </div>
 
-                        return (
-                          <div
-                            className="workspace-decision-card"
-                            key={decision.id}
-                          >
-                            <div className="decision-left">
-                              <div className="decision-icon">
-                                <Icon size={17} />
+                      <div className="overview-table-list">
+                        {dashboardDecisions.slice(0, 5).map((decision) => {
+                          const Icon = decision.icon;
+
+                          return (
+                            <div
+                              className="overview-table-row"
+                              key={decision.id}
+                            >
+                              <div className="overview-title-cell">
+                                <div className="overview-row-icon">
+                                  <Icon size={15} />
+                                </div>
+                                <div>
+                                  <strong>{decision.name}</strong>
+                                  <span>
+                                    {decision.problemStatement ||
+                                      "Decision record"}
+                                  </span>
+                                </div>
                               </div>
 
-                              <div className="decision-info">
-                                <strong>{decision.name}</strong>
+                              <span
+                                className={`status status-${getStatusClass(decision.status)}`}
+                              >
+                                <span />
+                                {decision.status}
+                              </span>
 
-                                <span>{decision.problemStatement}</span>
-                              </div>
-                            </div>
+                              <span className="overview-muted">
+                                {decision.team}
+                              </span>
 
-                            <span className={`status status-${statusClass}`}>
-                              <span />
-                              {decision.status}
-                            </span>
+                              <span className="overview-muted">
+                                {decision.created}
+                              </span>
 
-                            <span className="decision-date">
-                              {decision.created}
-                            </span>
-
-                            <div className="decision-actions">
                               <button
-                                className="decision-view-button"
+                                className="overview-row-more"
                                 type="button"
                                 onClick={() => openDecision(decision)}
-                              >
-                                View
-                              </button>
-
-                              <button
-                                className="decision-more"
-                                type="button"
-                                onClick={() => openEditDecision(decision)}
-                                aria-label={`Edit ${decision.name}`}
+                                aria-label={`Open ${decision.name}`}
                               >
                                 <MoreHorizontal size={16} />
                               </button>
                             </div>
+                          );
+                        })}
+
+                        {!dashboardDecisions.length && (
+                          <div className="overview-table-empty">
+                            <Search size={18} />
+                            <strong>No decisions yet</strong>
+                            <span>
+                              Create a decision to start building your
+                              workspace.
+                            </span>
                           </div>
-                        );
-                      })
-                    ) : (
-                      <div className="empty-search-state">
-                        <Search size={18} />
+                        )}
+                      </div>
+                    </section>
 
-                        <strong>No decisions found</strong>
+                    <section className="overview-card overview-trend-card">
+                      <div className="overview-card-head">
+                        <h2>Activity trend</h2>
+                        <select defaultValue="6">
+                          <option value="6">Last 6 months</option>
+                          <option value="3">Last 3 months</option>
+                        </select>
+                      </div>
 
-                        <span>
-                          Create a new decision or adjust your search.
-                        </span>
+                      <div className="overview-chart">
+                        <div className="chart-y-labels">
+                          <span>8</span>
+                          <span>6</span>
+                          <span>4</span>
+                          <span>2</span>
+                          <span>0</span>
+                        </div>
 
-                        <button type="button" onClick={openCreateDecision}>
-                          Create decision
+                        <svg
+                          viewBox="0 0 620 180"
+                          preserveAspectRatio="none"
+                          role="img"
+                          aria-label="Decision activity trend"
+                        >
+                          <line x1="28" y1="20" x2="605" y2="20" />
+                          <line x1="28" y1="55" x2="605" y2="55" />
+                          <line x1="28" y1="90" x2="605" y2="90" />
+                          <line x1="28" y1="125" x2="605" y2="125" />
+                          <line x1="28" y1="160" x2="605" y2="160" />
+                          <polyline
+                            points="28,145 145,126 260,134 375,102 490,83 605,48"
+                            className="trend-line"
+                          />
+                          <circle cx="28" cy="145" r="4" />
+                          <circle cx="145" cy="126" r="4" />
+                          <circle cx="260" cy="134" r="4" />
+                          <circle cx="375" cy="102" r="4" />
+                          <circle cx="490" cy="83" r="4" />
+                          <circle cx="605" cy="48" r="4" />
+                        </svg>
+
+                        <div className="chart-x-labels">
+                          <span>Apr</span>
+                          <span>May</span>
+                          <span>Jun</span>
+                          <span>Jul</span>
+                          <span>Aug</span>
+                          <span>Sep</span>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="overview-side-stack">
+                    <section className="overview-card overview-status-card">
+                      <div className="overview-card-head">
+                        <h2>Decisions by status</h2>
+                      </div>
+
+                      <div className="overview-donut-layout">
+                        <div className="overview-donut" style={donutStyle}>
+                          <div>
+                            <strong>{totalDecisions}</strong>
+                            <span>Total</span>
+                          </div>
+                        </div>
+
+                        <div className="overview-legend">
+                          <div>
+                            <span className="legend-dot legend-approved" />
+                            <span>Approved</span>
+                            <strong>
+                              {approvedCount} ({statusPercent(approvedCount)}%)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-review" />
+                            <span>Under review</span>
+                            <strong>
+                              {reviewCount} ({statusPercent(reviewCount)}%)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-draft" />
+                            <span>Draft</span>
+                            <strong>
+                              {draftCount} ({statusPercent(draftCount)}%)
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span className="legend-dot legend-rejected" />
+                            <span>Rejected</span>
+                            <strong>
+                              {rejectedCount} ({statusPercent(rejectedCount)}%)
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="overview-card overview-team-card">
+                      <div className="overview-card-head">
+                        <div>
+                          <h2>My Team</h2>
+                          <span className="overview-card-subtitle">
+                            Your active collaboration spaces
+                          </span>
+                        </div>
+                        <button
+                          className="view-all"
+                          type="button"
+                          onClick={() => handlePageChange("Teams")}
+                        >
+                          View all <ChevronRight size={15} />
                         </button>
                       </div>
-                    )}
+                      <div className="overview-team-list">
+                        {myTeams.slice(0, 3).map((team) => (
+                          <button
+                            className="overview-team-row"
+                            type="button"
+                            key={team.id}
+                            onClick={() => handlePageChange("Teams")}
+                          >
+                            <span className="overview-team-avatar">
+                              {team.name.slice(0, 2).toUpperCase()}
+                            </span>
+                            <span>
+                              <strong>{team.name}</strong>
+                              <small>
+                                {team._count?.members || 0} members ·{" "}
+                                {team._count?.decisions || 0} decisions
+                              </small>
+                            </span>
+                            <ChevronRight size={15} />
+                          </button>
+                        ))}
+                        {!myTeams.length && (
+                          <div className="overview-team-empty">
+                            <Users size={16} />
+                            <span>You are not assigned to a team yet.</span>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="overview-card overview-quick-card">
+                      <div className="overview-card-head">
+                        <h2>Quick actions</h2>
+                      </div>
+
+                      <button type="button" onClick={openCreateDecision}>
+                        <span className="quick-action-icon">
+                          <span>+</span>
+                        </span>
+                        <div>
+                          <strong>Create new decision</strong>
+                          <small>Start a new decision process</small>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange("Documents")}
+                      >
+                        <span className="quick-action-icon">
+                          <ArrowUpRight size={15} />
+                        </span>
+                        <div>
+                          <strong>Upload document</strong>
+                          <small>Add supporting evidence</small>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange("Discussions")}
+                      >
+                        <span className="quick-action-icon">
+                          <MessageCircle size={15} />
+                        </span>
+                        <div>
+                          <strong>Start a discussion</strong>
+                          <small>Collaborate with your team</small>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+                    </section>
                   </div>
                 </section>
-              )}
+              </div>
+            </section>
+          )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Reviews" && (
-                  <ReviewsPage
-                    apiRequest={apiRequest}
-                    decisions={decisions}
-                    openDecision={openDecision}
-                    currentUser={currentUser}
-                  />
+          {showDecisionsPage && (
+            <section className="workspace-page">
+              <div className="workspace-page-header">
+                <div>
+                  <span className="section-label">DECISION WORKSPACE</span>
+
+                  <h1>All decisions</h1>
+
+                  <p>Manage every decision stored in your workspace.</p>
+                </div>
+
+                <button
+                  className="new-decision-button"
+                  type="button"
+                  onClick={openCreateDecision}
+                >
+                  <span>+</span>
+                  New decision
+                </button>
+              </div>
+
+              <div className="workspace-toolbar">
+                <span>
+                  {filteredDecisions.length} result
+                  {filteredDecisions.length === 1 ? "" : "s"}
+                </span>
+
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery("")}>
+                    Clear search
+                  </button>
                 )}
+              </div>
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Knowledge" && (
-                  <KnowledgePage apiRequest={apiRequest} />
+              <div className="workspace-decisions-list">
+                {loading ? (
+                  <div className="empty-search-state">
+                    <Clock3 size={18} />
+
+                    <strong>Loading decisions</strong>
+
+                    <span>Fetching your workspace data.</span>
+                  </div>
+                ) : error ? (
+                  <div className="empty-search-state">
+                    <X size={18} />
+
+                    <strong>Unable to load decisions</strong>
+
+                    <span>{error}</span>
+
+                    <button type="button" onClick={fetchDecisions}>
+                      Try again
+                    </button>
+                  </div>
+                ) : filteredDecisions.length > 0 ? (
+                  filteredDecisions.map((decision) => {
+                    const Icon = decision.icon;
+
+                    const statusClass = getStatusClass(decision.status);
+
+                    return (
+                      <div
+                        className="workspace-decision-card"
+                        key={decision.id}
+                      >
+                        <div className="decision-left">
+                          <div className="decision-icon">
+                            <Icon size={17} />
+                          </div>
+
+                          <div className="decision-info">
+                            <strong>{decision.name}</strong>
+
+                            <span>{decision.problemStatement}</span>
+                            <small>
+                              Created by{" "}
+                              {decision.createdBy?.name || "Workspace member"}
+                            </small>
+                          </div>
+                        </div>
+
+                        <span className={`status status-${statusClass}`}>
+                          <span />
+                          {decision.status}
+                        </span>
+
+                        <span className="decision-date">
+                          {decision.created}
+                        </span>
+
+                        <div className="decision-actions">
+                          <button
+                            className="decision-view-button"
+                            type="button"
+                            onClick={() => openDecision(decision)}
+                          >
+                            View
+                          </button>
+
+                          {canManageDecision(decision) && (
+                            <button
+                              className="decision-more"
+                              type="button"
+                              onClick={() => openEditDecision(decision)}
+                              aria-label={`Edit ${decision.name}`}
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="empty-search-state">
+                    <Search size={18} />
+
+                    <strong>No decisions found</strong>
+
+                    <span>Create a new decision or adjust your search.</span>
+
+                    <button type="button" onClick={openCreateDecision}>
+                      Create decision
+                    </button>
+                  </div>
                 )}
+              </div>
+            </section>
+          )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Teams" && (
-                  <TeamsPage
-                    apiRequest={apiRequest}
-                    currentUser={currentUser}
-                  />
-                )}
+          {!showOverview && !showDecisionsPage && activePage === "Reviews" && (
+            <ReviewsPage
+              apiRequest={apiRequest}
+              decisions={decisions}
+              openDecision={openDecision}
+              currentUser={currentUser}
+              globalSearch={searchQuery}
+              onApprovalChange={async () => {
+                await fetchDecisions();
+                await fetchNotifications();
+              }}
+            />
+          )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Discussions" && (
-                  <DiscussionsPage apiRequest={apiRequest} />
-                )}
+          {!showOverview &&
+            !showDecisionsPage &&
+            activePage === "Knowledge" && (
+              <KnowledgePage
+                apiRequest={apiRequest}
+                openDecision={openDecision}
+                globalSearch={searchQuery}
+              />
+            )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Documents" && (
-                  <DocumentsPage apiRequest={apiRequest} />
-                )}
+          {!showOverview && !showDecisionsPage && activePage === "Teams" && (
+            <TeamsPage apiRequest={apiRequest} currentUser={currentUser} />
+          )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Analytics" && (
-                  <AnalyticsPage apiRequest={apiRequest} />
-                )}
+          {!showOverview &&
+            !showDecisionsPage &&
+            activePage === "Discussions" && (
+              <DiscussionsPage apiRequest={apiRequest} />
+            )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Reports" && (
-                  <ReportsPage apiRequest={apiRequest} />
-                )}
+          {!showOverview &&
+            !showDecisionsPage &&
+            activePage === "Documents" && (
+              <DocumentsPage apiRequest={apiRequest} />
+            )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Users" && <UsersPage apiRequest={apiRequest} />}
+          {!showOverview &&
+            !showDecisionsPage &&
+            activePage === "Analytics" && (
+              <AnalyticsPage apiRequest={apiRequest} />
+            )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Audit & Compliance" && (
-                  <AuditPage apiRequest={apiRequest} />
-                )}
+          {!showOverview && !showDecisionsPage && activePage === "Reports" && (
+            <ReportsPage apiRequest={apiRequest} />
+          )}
 
-              {!showOverview &&
-                !showDecisionsPage &&
-                activePage === "Settings" && (
-                  <SettingsPage
-                    currentUser={currentUser}
-                    apiRequest={apiRequest}
-                    onUserUpdated={setCurrentUser}
-                  />
-                )}
-            </div>
-            <footer className="dashboard-footer">
-              <span>DecisionVault</span>
+          {!showOverview && !showDecisionsPage && activePage === "Users" && (
+            <UsersPage apiRequest={apiRequest} />
+          )}
 
-              <span>Decisions, preserved.</span>
-            </footer>
-          </div>
+          {!showOverview &&
+            !showDecisionsPage &&
+            activePage === "Audit & Compliance" && (
+              <AuditPage apiRequest={apiRequest} />
+            )}
+
+          {!showOverview && !showDecisionsPage && activePage === "Settings" && (
+            <SettingsPage
+              currentUser={currentUser}
+              apiRequest={apiRequest}
+              onUserUpdated={setCurrentUser}
+            />
+          )}
+
+          <footer className="dashboard-footer">
+            <span>DecisionVault</span>
+
+            <span>Decisions, preserved.</span>
+          </footer>
         </div>
       </main>
 
@@ -2472,21 +2184,25 @@ function Dashboard() {
                   </div>
 
                   <div className="decision-modal-top-actions">
-                    <button
-                      className="modal-secondary"
-                      type="button"
-                      onClick={() => openEditDecision(selectedDecision)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="modal-danger"
-                      type="button"
-                      onClick={() => handleDeleteDecision(selectedDecision)}
-                      disabled={deletingDecision}
-                    >
-                      {deletingDecision ? "Deleting..." : "Delete"}
-                    </button>
+                    {canManageSelectedDecision && (
+                      <>
+                        <button
+                          className="modal-secondary"
+                          type="button"
+                          onClick={() => openEditDecision(selectedDecision)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="modal-danger"
+                          type="button"
+                          onClick={() => handleDeleteDecision(selectedDecision)}
+                          disabled={deletingDecision}
+                        >
+                          {deletingDecision ? "Deleting..." : "Delete"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2648,103 +2364,105 @@ function Dashboard() {
                         </span>
                       </div>
 
-                      <form
-                        className="alternative-form"
-                        onSubmit={handleSaveAlternative}
-                      >
-                        <input
-                          type="text"
-                          placeholder="Alternative name"
-                          value={alternativeForm.name}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Pros"
-                          value={alternativeForm.pros}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              pros: event.target.value,
-                            })
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Cons"
-                          value={alternativeForm.cons}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              cons: event.target.value,
-                            })
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Cost"
-                          value={alternativeForm.cost}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              cost: event.target.value,
-                            })
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Feasibility"
-                          value={alternativeForm.feasibility}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              feasibility: event.target.value,
-                            })
-                          }
-                        />
-                        <input
-                          type="text"
-                          placeholder="Risk"
-                          value={alternativeForm.risk}
-                          onChange={(event) =>
-                            setAlternativeForm({
-                              ...alternativeForm,
-                              risk: event.target.value,
-                            })
-                          }
-                        />
-                        <div className="modal-actions">
-                          <button
-                            className="modal-primary"
-                            type="submit"
-                            disabled={savingAlternative}
-                          >
-                            {savingAlternative
-                              ? "Saving..."
-                              : editingAlternative
-                                ? "Update alternative"
-                                : "Add alternative"}
-                            <ArrowUpRight size={14} />
-                          </button>
-                          {editingAlternative && (
+                      {canManageSelectedDecision && (
+                        <form
+                          className="alternative-form"
+                          onSubmit={handleSaveAlternative}
+                        >
+                          <input
+                            type="text"
+                            placeholder="Alternative name"
+                            value={alternativeForm.name}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                name: event.target.value,
+                              })
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder="Pros"
+                            value={alternativeForm.pros}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                pros: event.target.value,
+                              })
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder="Cons"
+                            value={alternativeForm.cons}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                cons: event.target.value,
+                              })
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder="Cost"
+                            value={alternativeForm.cost}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                cost: event.target.value,
+                              })
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder="Feasibility"
+                            value={alternativeForm.feasibility}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                feasibility: event.target.value,
+                              })
+                            }
+                          />
+                          <input
+                            type="text"
+                            placeholder="Risk"
+                            value={alternativeForm.risk}
+                            onChange={(event) =>
+                              setAlternativeForm({
+                                ...alternativeForm,
+                                risk: event.target.value,
+                              })
+                            }
+                          />
+                          <div className="modal-actions">
                             <button
-                              className="modal-secondary"
-                              type="button"
-                              onClick={() => {
-                                setEditingAlternative(null);
-                                setAlternativeForm(EMPTY_ALTERNATIVE_FORM);
-                              }}
+                              className="modal-primary"
+                              type="submit"
+                              disabled={savingAlternative}
                             >
-                              Cancel edit
+                              {savingAlternative
+                                ? "Saving..."
+                                : editingAlternative
+                                  ? "Update alternative"
+                                  : "Add alternative"}
+                              <ArrowUpRight size={14} />
                             </button>
-                          )}
-                        </div>
-                      </form>
+                            {editingAlternative && (
+                              <button
+                                className="modal-secondary"
+                                type="button"
+                                onClick={() => {
+                                  setEditingAlternative(null);
+                                  setAlternativeForm(EMPTY_ALTERNATIVE_FORM);
+                                }}
+                              >
+                                Cancel edit
+                              </button>
+                            )}
+                          </div>
+                        </form>
+                      )}
 
                       <div className="tab-scroll-area alternatives-scroll-area">
                         {(selectedDecision.alternatives || []).length > 0 ? (
@@ -2759,29 +2477,33 @@ function Dashboard() {
                                     <strong>{alternative.name}</strong>
                                     <span>Option</span>
                                   </div>
-                                  <div className="alternative-actions">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleEditAlternative(alternative)
-                                      }
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleDeleteAlternative(alternative)
-                                      }
-                                      disabled={
-                                        deletingAlternativeId === alternative.id
-                                      }
-                                    >
-                                      {deletingAlternativeId === alternative.id
-                                        ? "Deleting..."
-                                        : "Delete"}
-                                    </button>
-                                  </div>
+                                  {canManageSelectedDecision && (
+                                    <div className="alternative-actions">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleEditAlternative(alternative)
+                                        }
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteAlternative(alternative)
+                                        }
+                                        disabled={
+                                          deletingAlternativeId ===
+                                          alternative.id
+                                        }
+                                      >
+                                        {deletingAlternativeId ===
+                                        alternative.id
+                                          ? "Deleting..."
+                                          : "Delete"}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="alternative-grid">
                                   <div>
@@ -2847,69 +2569,71 @@ function Dashboard() {
                         </span>
                       </div>
 
-                      <div className="document-upload-panel">
-                        <label
-                          className="file-picker"
-                          htmlFor="decision-document-upload"
-                        >
-                          <input
-                            id="decision-document-upload"
-                            type="file"
-                            onChange={(event) =>
-                              setSelectedFile(event.target.files?.[0] || null)
-                            }
-                          />
-                          <span className="file-picker-icon">
-                            <FileText size={17} />
-                          </span>
-                          <span className="file-picker-copy">
-                            <strong>
-                              {selectedFile
-                                ? selectedFile.name
-                                : "Choose a supporting file"}
-                            </strong>
-                            <small>
-                              PDF, DOCX, PPTX, XLSX or other project files
-                            </small>
-                          </span>
-                        </label>
-                        <div className="document-upload-fields">
-                          <select
-                            value={documentCategory}
-                            onChange={(event) =>
-                              setDocumentCategory(event.target.value)
-                            }
+                      {canManageSelectedDecision && (
+                        <div className="document-upload-panel">
+                          <label
+                            className="file-picker"
+                            htmlFor="decision-document-upload"
                           >
-                            <option>General</option>
-                            <option>Research</option>
-                            <option>Evaluation</option>
-                            <option>Requirements</option>
-                            <option>Architecture</option>
-                            <option>Security</option>
-                            <option>Compliance</option>
-                            <option>Planning</option>
-                            <option>Deployment</option>
-                          </select>
-                          <input
-                            value={documentTags}
-                            onChange={(event) =>
-                              setDocumentTags(event.target.value)
-                            }
-                            placeholder="Tags: AI, research, architecture"
-                          />
+                            <input
+                              id="decision-document-upload"
+                              type="file"
+                              onChange={(event) =>
+                                setSelectedFile(event.target.files?.[0] || null)
+                              }
+                            />
+                            <span className="file-picker-icon">
+                              <FileText size={17} />
+                            </span>
+                            <span className="file-picker-copy">
+                              <strong>
+                                {selectedFile
+                                  ? selectedFile.name
+                                  : "Choose a supporting file"}
+                              </strong>
+                              <small>
+                                PDF, DOCX, PPTX, XLSX or other project files
+                              </small>
+                            </span>
+                          </label>
+                          <div className="document-upload-fields">
+                            <select
+                              value={documentCategory}
+                              onChange={(event) =>
+                                setDocumentCategory(event.target.value)
+                              }
+                            >
+                              <option>General</option>
+                              <option>Research</option>
+                              <option>Evaluation</option>
+                              <option>Requirements</option>
+                              <option>Architecture</option>
+                              <option>Security</option>
+                              <option>Compliance</option>
+                              <option>Planning</option>
+                              <option>Deployment</option>
+                            </select>
+                            <input
+                              value={documentTags}
+                              onChange={(event) =>
+                                setDocumentTags(event.target.value)
+                              }
+                              placeholder="Tags: AI, research, architecture"
+                            />
+                          </div>
+                          <button
+                            className="modal-primary"
+                            type="button"
+                            onClick={handleUploadDocument}
+                            disabled={!selectedFile || uploadingDocument}
+                          >
+                            {uploadingDocument
+                              ? "Uploading..."
+                              : "Upload document"}
+                            <ArrowUpRight size={14} />
+                          </button>
                         </div>
-                        <button
-                          className="modal-primary"
-                          type="button"
-                          onClick={handleUploadDocument}
-                          disabled={!selectedFile || uploadingDocument}
-                        >
-                          {uploadingDocument
-                            ? "Uploading..."
-                            : "Upload document"}
-                          <ArrowUpRight size={14} />
-                        </button>
-                      </div>
+                      )}
 
                       <div className="tab-scroll-area documents-scroll-area">
                         {(selectedDecision.documents || []).length > 0 ? (
@@ -3188,27 +2912,37 @@ function Dashboard() {
                                       >
                                         Reply
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleEditDiscussion(discussion)
-                                        }
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleDeleteDiscussion(discussion)
-                                        }
-                                        disabled={
-                                          deletingDiscussionId === discussion.id
-                                        }
-                                      >
-                                        {deletingDiscussionId === discussion.id
-                                          ? "Deleting..."
-                                          : "Delete"}
-                                      </button>
+                                      {Number(
+                                        discussion.createdById ||
+                                          discussion.createdBy?.id,
+                                      ) === Number(currentUser?.id) ||
+                                      canManageSelectedDecision ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleEditDiscussion(discussion)
+                                            }
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleDeleteDiscussion(discussion)
+                                            }
+                                            disabled={
+                                              deletingDiscussionId ===
+                                              discussion.id
+                                            }
+                                          >
+                                            {deletingDiscussionId ===
+                                            discussion.id
+                                              ? "Deleting..."
+                                              : "Delete"}
+                                          </button>
+                                        </>
+                                      ) : null}
                                     </div>
                                   </div>
                                   {discussion.parentId && (
