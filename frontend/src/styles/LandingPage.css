@@ -181,7 +181,7 @@ button:focus-visible {
   cursor: pointer;
 
   font-family: "Manrope", sans-serif;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 700;
 
   letter-spacing: -0.04em;
@@ -230,7 +230,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 
   transition:
@@ -262,7 +262,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 
   transition: 180ms ease;
@@ -410,7 +410,7 @@ button:focus-visible {
 
   color: var(--dv-green);
 
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -450,7 +450,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 16px;
+  font-size: 19px;
 
   line-height: 1.8;
 }
@@ -481,7 +481,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 
   transition: 220ms ease;
@@ -540,7 +540,7 @@ button:focus-visible {
 
   color: var(--dv-text-muted);
 
-  font-size: 10px;
+  font-size: 12px;
 
   text-transform: uppercase;
 
@@ -574,7 +574,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 9px;
+  font-size: 11px;
 
   text-transform: uppercase;
 
@@ -824,13 +824,13 @@ button:focus-visible {
 
   color: rgba(210, 245, 220, 0.5);
 
-  font-size: 8px;
+  font-size: 10px;
 
   letter-spacing: 0.15em;
 }
 
 .dv-vault-label strong {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* shadow */
@@ -885,12 +885,12 @@ button:focus-visible {
 
 .dv-vault-card span {
   color: var(--dv-text-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .dv-vault-card strong {
   color: var(--dv-text);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .dv-card-one {
@@ -935,7 +935,7 @@ button:focus-visible {
 
   color: var(--dv-green);
 
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 
   letter-spacing: 0.12em;
@@ -964,7 +964,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 15px;
+  font-size: 18px;
 
   line-height: 1.75;
 }
@@ -1062,7 +1062,7 @@ button:focus-visible {
 
   color: #9da69f;
 
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -1071,7 +1071,7 @@ button:focus-visible {
 
   font-family: "Manrope", sans-serif;
 
-  font-size: 23px;
+  font-size: 28px;
 
   letter-spacing: -0.045em;
 }
@@ -1083,7 +1083,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 13px;
+  font-size: 16px;
 
   line-height: 1.8;
 }
@@ -1183,7 +1183,7 @@ button:focus-visible {
 .dv-feature-top > span {
   color: #9da69f;
 
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1192,7 +1192,7 @@ button:focus-visible {
 
   font-family: "Manrope", sans-serif;
 
-  font-size: 19px;
+  font-size: 23px;
 
   letter-spacing: -0.04em;
 }
@@ -1202,7 +1202,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 13px;
+  font-size: 16px;
 
   line-height: 1.75;
 }
@@ -1294,7 +1294,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 15px;
+  font-size: 18px;
 
   line-height: 1.8;
 }
@@ -1362,7 +1362,7 @@ button:focus-visible {
 
   color: #8b958f;
 
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* ==========================================
@@ -1578,7 +1578,7 @@ button:focus-visible {
   }
 
   .dv-hero-content > p {
-    font-size: 14px;
+    font-size: 17px;
   }
 
   .dv-vault-stage {
@@ -1650,7 +1650,7 @@ button:focus-visible {
   }
 
   .dv-stats div {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .dv-vault-stage {
@@ -1704,7 +1704,7 @@ button:focus-visible {
   background: rgba(255, 255, 255, 0.72);
   color: var(--dv-text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   transition: 180ms ease;
 }
@@ -1813,7 +1813,7 @@ button:focus-visible {
 
 .dv-memory-core span {
   position: relative;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -1841,12 +1841,12 @@ button:focus-visible {
 
 .dv-memory-card span {
   color: var(--dv-text-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .dv-memory-card strong {
   color: var(--dv-text);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .dv-memory-icon {
@@ -1909,7 +1909,7 @@ button:focus-visible {
   align-items: center;
   gap: 20px;
   color: #7f8983;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .dv-footer-brand {
@@ -1948,7 +1948,7 @@ button:focus-visible {
   background: transparent;
   color: #7f8983;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   transition: color 180ms ease;
 }
@@ -2105,11 +2105,11 @@ button:focus-visible {
   }
 
   .dv-memory-card strong {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .dv-memory-card span {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .dv-memory-core {

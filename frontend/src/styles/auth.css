@@ -116,7 +116,7 @@ select {
   gap: 11px;
   width: fit-content;
   font-family: "Manrope", sans-serif;
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.04em;
 }
@@ -151,7 +151,7 @@ select {
   align-items: center;
   gap: 8px;
   color: var(--auth-green);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -170,7 +170,7 @@ select {
   margin: 13px 0 0;
   color: var(--auth-secondary);
   font-family: "Manrope", sans-serif;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.035em;
@@ -201,14 +201,14 @@ select {
 }
 
 .metric-symbol {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .auth-metric strong {
   color: var(--auth-green);
   font-family: "Manrope", sans-serif;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -218,7 +218,7 @@ select {
   max-width: 90px;
   margin-top: 6px;
   color: var(--auth-secondary);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -383,7 +383,7 @@ select {
   padding-top: 8px;
   border-top: 1px solid rgba(194, 255, 210, 0.11);
   color: rgba(210, 245, 220, 0.48);
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.13em;
 }
 
@@ -398,7 +398,7 @@ select {
   border: 1px solid rgba(16, 21, 18, 0.07);
   color: #68756e;
   box-shadow: 0 15px 30px rgba(20, 40, 25, 0.07);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -456,7 +456,7 @@ select {
   max-width: 405px;
   margin: 22px 0 0;
   color: var(--auth-secondary);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.7;
 }
 
@@ -469,7 +469,7 @@ select {
   align-items: center;
   gap: 9px;
   color: #929b95;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .visual-footer span:nth-child(2) {
@@ -518,7 +518,7 @@ select {
   display: block;
   margin-bottom: 11px;
   color: var(--auth-green);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -534,7 +534,7 @@ select {
 .auth-heading p {
   margin: 11px 0 0;
   color: var(--auth-secondary);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -546,7 +546,7 @@ select {
   display: block;
   margin-bottom: 8px;
   color: var(--auth-text);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -570,7 +570,7 @@ select {
   outline: none;
   background: #fbfcfa;
   color: var(--auth-text);
-  font-size: 12px;
+  font-size: 14px;
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
@@ -604,7 +604,7 @@ select {
   background: transparent;
   color: var(--auth-green);
   cursor: pointer;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -625,7 +625,7 @@ select {
   background: var(--auth-green);
   color: white;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   box-shadow: 0 8px 22px rgba(23, 107, 58, 0.14);
   transition:
@@ -659,7 +659,7 @@ select {
 
 .auth-divider small {
   color: #a1aaa4;
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
 }
@@ -670,7 +670,7 @@ select {
   justify-content: center;
   gap: 5px;
   color: var(--auth-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .auth-switch button {
@@ -682,7 +682,7 @@ select {
   background: transparent;
   color: var(--auth-green);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -696,7 +696,7 @@ select {
   justify-content: space-between;
   margin-top: 17px;
   color: #99a19c;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 @keyframes cardEntrance {
@@ -848,11 +848,11 @@ select {
   }
 
   .auth-metric strong {
-    font-size: 19px;
+    font-size: 23px;
   }
 
   .auth-metric span {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .auth-graphic {
@@ -872,7 +872,7 @@ select {
   }
 
   .auth-bottom-copy p {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .auth-panel {
@@ -968,7 +968,7 @@ select {
     width: min(100%, 420px);
     margin: 0 auto 30px;
     font-family: "Manrope", sans-serif;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: -0.04em;
   }
@@ -1016,7 +1016,7 @@ select {
   }
 
   .auth-heading p {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .auth-form-group input,
@@ -1027,7 +1027,7 @@ select {
 
   .auth-legal {
     width: 100%;
-    font-size: 9px;
+    font-size: 11px;
   }
 }
 
