@@ -1,47 +1,40 @@
 # DecisionVault
 
-> **Decision intelligence platform for capturing, comparing, discussing, and preserving organizational decisions.**
+> A decision intelligence platform for capturing, evaluating, discussing, and preserving organizational decisions.
 
-DecisionVault provides a centralized workspace for documenting decisions, evaluating alternatives, managing supporting files, and preserving the reasoning behind outcomes.
+## Live Project
 
-## Features
+**[Open DecisionVault](https://decision-vault-ks.vercel.app)** 
 
-- **Decision Management** — Create, edit, view, and track decisions with status management.
-- **Alternative Analysis** — Compare options using pros, cons, cost, feasibility, and risk.
-- **Document Management** — Upload and open supporting files directly from a decision.
-- **Discussion Module** — Add comments, meeting notes, rationales, threads, replies, and attachments.
-- **Authentication** — JWT-based login with role-aware access.
-- **Persistent Storage** — PostgreSQL database with Prisma ORM and local file storage.
+## Key Features
+
+- Decision management and status tracking
+- Alternative comparison with risk, cost, feasibility, and pros/cons
+- Supporting document management
+- Discussions and decision rationale
+- Role-based authentication and approval workflows
+- Team collaboration and activity tracking
+- Knowledge repository for organizational decision history
 
 ## Tech Stack
 
-**Frontend:** React  
+**Frontend:** React, Vite  
 **Backend:** Node.js, Express  
 **Database:** PostgreSQL  
 **ORM:** Prisma  
 **Authentication:** JWT, bcrypt  
-**Storage:** Local filesystem  
-**Tools:** Docker, Postman, Git/GitHub
+**Storage:** Local filesystem
 
-## Project Structure
+## Login
 
-```text
-DecisionVault/
-├── frontend/        # React application
-├── backend/         # Express API
-│   ├── src/
-│   ├── prisma/
-│   └── uploads/
-└── README.md
-```
+Use the demo account:
 
-## Getting Started
+**Email:** `demo@decisionvault.com`  
+**Password:** `Demo@12345`
 
-### 1. Start PostgreSQL
+## Local Setup
 
-The project uses PostgreSQL through Docker.
-
-### 2. Backend
+### Backend
 
 ```bash
 cd backend
@@ -49,13 +42,7 @@ npm install
 npm run backend
 ```
 
-The API runs on:
-
-```text
-http://localhost:4000
-```
-
-### 3. Frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -63,13 +50,7 @@ npm install
 npm run dev
 ```
 
-The frontend runs on the Vite development server.
-
-## Current Milestone
-
-**Milestone 2 — Completed**
-
-Includes decision management, alternative comparison, file uploads, document management, discussion features, and related collaboration functionality.
+The frontend uses the Vite development server, while the backend runs on port `4000`.
 
 ---
 
