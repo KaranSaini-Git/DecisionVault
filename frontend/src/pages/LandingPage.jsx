@@ -69,7 +69,6 @@ export default function LandingPage() {
           </div>
 
           <div className="dv-nav-actions">
-
             <button className="dv-nav-cta" onClick={() => navigate("/login")}>
               Explore
               <ArrowUpRight size={15} />

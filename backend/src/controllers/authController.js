@@ -8,11 +8,15 @@ const register = async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name?.trim() || !email?.trim() || !password) {
-      return res.status(400).json({ message: "Name, email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Name, email and password are required" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
 
     if (existingUser) {
       return res.status(409).json({ message: "Email already exists" });
@@ -31,8 +35,15 @@ const register = async (req, res) => {
       select: { id: true, name: true, email: true, role: true },
     });
 
-    await logActivity({ userId: user.id, action: "USER_REGISTERED", entityType: "User", entityId: user.id });
-    return res.status(201).json({ message: "User registered successfully", user });
+    await logActivity({
+      userId: user.id,
+      action: "USER_REGISTERED",
+      entityType: "User",
+      entityId: user.id,
+    });
+    return res
+      .status(201)
+      .json({ message: "User registered successfully", user });
   } catch (error) {
     console.error("Register error:", error);
     return res.status(500).json({ message: "Failed to register user" });
@@ -44,12 +55,19 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email?.trim() || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
 
-    if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
+    if (
+      !existingUser ||
+      !(await bcrypt.compare(password, existingUser.password))
+    ) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
@@ -59,7 +77,12 @@ const login = async (req, res) => {
       { expiresIn: "24h" },
     );
 
-    await logActivity({ userId: existingUser.id, action: "USER_LOGGED_IN", entityType: "User", entityId: existingUser.id });
+    await logActivity({
+      userId: existingUser.id,
+      action: "USER_LOGGED_IN",
+      entityType: "User",
+      entityId: existingUser.id,
+    });
 
     return res.status(200).json({
       message: "Login successful",
@@ -81,7 +104,8 @@ const getMe = async (req, res) => {
   try {
     const userId = req.user?.userId;
 
-    if (!userId) return res.status(401).json({ message: "Authentication required" });
+    if (!userId)
+      return res.status(401).json({ message: "Authentication required" });
 
     const user = await prisma.user.findUnique({
       where: { id: userId },

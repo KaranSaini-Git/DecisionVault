@@ -132,7 +132,12 @@ const updateDiscussion = async (req, res) => {
         id: parsedDiscussionId,
         decisionId: Number(decisionId),
       },
-      select: { id: true, createdById: true, decisionId: true, decision: { select: { createdById: true, teamId: true } } },
+      select: {
+        id: true,
+        createdById: true,
+        decisionId: true,
+        decision: { select: { createdById: true, teamId: true } },
+      },
     });
 
     if (!existing) {
@@ -143,7 +148,10 @@ const updateDiscussion = async (req, res) => {
 
     const canModerate = await canManageDecision(existing.decision, req.user);
     const canEdit = existing.createdById === req.user.userId || canModerate;
-    if (!canEdit) return res.status(403).json({ message: "You can only edit your own discussion entries" });
+    if (!canEdit)
+      return res
+        .status(403)
+        .json({ message: "You can only edit your own discussion entries" });
 
     const data = {};
 
@@ -209,7 +217,10 @@ const deleteDiscussion = async (req, res) => {
 
     const canModerate = await canManageDecision(existing.decision, req.user);
     const canDelete = existing.createdById === req.user.userId || canModerate;
-    if (!canDelete) return res.status(403).json({ message: "You can only delete your own discussion entries" });
+    if (!canDelete)
+      return res
+        .status(403)
+        .json({ message: "You can only delete your own discussion entries" });
 
     await prisma.discussion.delete({
       where: {

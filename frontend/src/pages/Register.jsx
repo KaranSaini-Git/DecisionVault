@@ -18,7 +18,8 @@ function Register() {
     try {
       setLoading(true);
 
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+      const apiBaseUrl =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
       const response = await fetch(`${apiBaseUrl}/api/auth/register`, {
         method: "POST",
         headers: {
@@ -135,9 +136,7 @@ function Register() {
               className="register-submit"
               disabled={loading}
             >
-              <span>
-                {loading ? "Creating account..." : "Create account"}
-              </span>
+              <span>{loading ? "Creating account..." : "Create account"}</span>
 
               {!loading && <ArrowRight size={16} />}
             </button>
@@ -152,10 +151,7 @@ function Register() {
           <div className="register-switch">
             <span>Already have an account?</span>
 
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-            >
+            <button type="button" onClick={() => navigate("/login")}>
               Sign in
               <ArrowRight size={14} />
             </button>

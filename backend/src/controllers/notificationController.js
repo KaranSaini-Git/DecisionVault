@@ -9,7 +9,9 @@ const listNotifications = async (req, res) => {
       take: 50,
     });
 
-    const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+    const unreadCount = notifications.filter(
+      (notification) => !notification.isRead,
+    ).length;
 
     res.status(200).json({ notifications, unreadCount });
   } catch (error) {
@@ -26,7 +28,8 @@ const markNotificationRead = async (req, res) => {
       data: { isRead: true },
     });
 
-    if (!notification.count) return res.status(404).json({ message: "Notification not found" });
+    if (!notification.count)
+      return res.status(404).json({ message: "Notification not found" });
     res.status(200).json({ message: "Notification marked as read" });
   } catch (error) {
     console.error("Mark notification read error:", error);

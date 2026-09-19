@@ -13,7 +13,14 @@ const getOwnedDecision = async (decisionId, userId) => {
 
 const createAlternative = async (req, res) => {
   try {
-    const { name, pros = "", cons = "", cost = "", feasibility = "", risk = "" } = req.body;
+    const {
+      name,
+      pros = "",
+      cons = "",
+      cost = "",
+      feasibility = "",
+      risk = "",
+    } = req.body;
     const { decisionId } = req.params;
 
     if (!name?.trim()) {
@@ -22,14 +29,19 @@ const createAlternative = async (req, res) => {
       });
     }
 
-    const decision = await prisma.decision.findUnique({ where: { id: Number(decisionId) } });
+    const decision = await prisma.decision.findUnique({
+      where: { id: Number(decisionId) },
+    });
 
     if (!decision) {
       return res.status(404).json({ message: "Decision not found" });
     }
 
     if (!(await canManageDecision(decision, req.user))) {
-      return res.status(403).json({ message: "You do not have permission to modify alternatives for this decision" });
+      return res.status(403).json({
+        message:
+          "You do not have permission to modify alternatives for this decision",
+      });
     }
 
     const alternative = await prisma.alternative.create({
@@ -40,7 +52,7 @@ const createAlternative = async (req, res) => {
         cost,
         feasibility,
         risk,
-          decisionId: decision.id,
+        decisionId: decision.id,
       },
     });
 
@@ -102,14 +114,19 @@ const updateAlternative = async (req, res) => {
     const { decisionId, alternativeId } = req.params;
     const { name, pros, cons, cost, feasibility, risk } = req.body;
 
-    const decision = await prisma.decision.findUnique({ where: { id: Number(decisionId) } });
+    const decision = await prisma.decision.findUnique({
+      where: { id: Number(decisionId) },
+    });
 
     if (!decision) {
       return res.status(404).json({ message: "Decision not found" });
     }
 
     if (!(await canManageDecision(decision, req.user))) {
-      return res.status(403).json({ message: "You do not have permission to modify alternatives for this decision" });
+      return res.status(403).json({
+        message:
+          "You do not have permission to modify alternatives for this decision",
+      });
     }
 
     const existingAlternative = await prisma.alternative.findFirst({
@@ -172,14 +189,19 @@ const deleteAlternative = async (req, res) => {
   try {
     const { decisionId, alternativeId } = req.params;
 
-    const decision = await prisma.decision.findUnique({ where: { id: Number(decisionId) } });
+    const decision = await prisma.decision.findUnique({
+      where: { id: Number(decisionId) },
+    });
 
     if (!decision) {
       return res.status(404).json({ message: "Decision not found" });
     }
 
     if (!(await canManageDecision(decision, req.user))) {
-      return res.status(403).json({ message: "You do not have permission to modify alternatives for this decision" });
+      return res.status(403).json({
+        message:
+          "You do not have permission to modify alternatives for this decision",
+      });
     }
 
     const existingAlternative = await prisma.alternative.findFirst({

@@ -16,7 +16,8 @@ function Login() {
     try {
       setLoading(true);
 
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
@@ -93,7 +94,9 @@ function Login() {
                 <button
                   type="button"
                   className="login-forgot"
-                  onClick={() => alert("Password recovery will be added later.")}
+                  onClick={() =>
+                    alert("Password recovery will be added later.")
+                  }
                 >
                   Forgot?
                 </button>
@@ -110,11 +113,7 @@ function Login() {
               />
             </div>
 
-            <button
-              type="submit"
-              className="login-submit"
-              disabled={loading}
-            >
+            <button type="submit" className="login-submit" disabled={loading}>
               <span>{loading ? "Signing in..." : "Sign in"}</span>
 
               {!loading && <ArrowRight size={16} />}
@@ -130,10 +129,7 @@ function Login() {
           <div className="login-switch">
             <span>Don't have an account?</span>
 
-            <button
-              type="button"
-              onClick={() => navigate("/register")}
-            >
+            <button type="button" onClick={() => navigate("/register")}>
               Create one
               <ArrowRight size={14} />
             </button>

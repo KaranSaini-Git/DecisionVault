@@ -5,13 +5,21 @@ import { canManageDecision } from "../services/authorizationService.js";
 const uploadDocument = async (req, res) => {
   try {
     const decisionId = Number(req.params.decisionId);
-    if (!Number.isInteger(decisionId) || decisionId <= 0) return res.status(400).json({ message: "Invalid decision ID" });
+    if (!Number.isInteger(decisionId) || decisionId <= 0)
+      return res.status(400).json({ message: "Invalid decision ID" });
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    const decision = await prisma.decision.findUnique({ where: { id: decisionId }, select: { id: true, teamId: true } });
-    if (!decision) return res.status(404).json({ message: "Decision not found" });
+    const decision = await prisma.decision.findUnique({
+      where: { id: decisionId },
+      select: { id: true, teamId: true },
+    });
+    if (!decision)
+      return res.status(404).json({ message: "Decision not found" });
     if (!(await canManageDecision(decision, req.user))) {
-      return res.status(403).json({ message: "You do not have permission to upload documents to this decision" });
+      return res.status(403).json({
+        message:
+          "You do not have permission to upload documents to this decision",
+      });
     }
 
     const document = await prisma.document.create({
@@ -32,7 +40,11 @@ const uploadDocument = async (req, res) => {
       entityId: document.id,
       decisionId,
       teamId: decision.teamId,
-      metadata: { filename: document.filename, category: document.category, tags: document.tags },
+      metadata: {
+        filename: document.filename,
+        category: document.category,
+        tags: document.tags,
+      },
     });
 
     res.status(201).json(document);
@@ -45,7 +57,8 @@ const uploadDocument = async (req, res) => {
 const getDocuments = async (req, res) => {
   try {
     const decisionId = Number(req.params.decisionId);
-    if (!Number.isInteger(decisionId) || decisionId <= 0) return res.status(400).json({ message: "Invalid decision ID" });
+    if (!Number.isInteger(decisionId) || decisionId <= 0)
+      return res.status(400).json({ message: "Invalid decision ID" });
 
     const documents = await prisma.document.findMany({
       where: { decisionId },
