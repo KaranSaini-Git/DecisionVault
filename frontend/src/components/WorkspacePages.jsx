@@ -811,7 +811,7 @@ function KnowledgePage({
         nodes,
         edges: Array.isArray(data?.edges) ? data.edges : [],
       });
-      setSelectedNode(root || null);
+      setSelectedNode(null);
       setExpanded({
         documents: false,
         alternatives: false,
@@ -986,34 +986,83 @@ function KnowledgePage({
     }
 
     if (expanded.alternatives) {
-      const alternativeChildren = visibleNodeList.filter(
-        (node) => node.type === "alternative",
+      /*
+       * Mirror the Discussions branch. Keep the Alternatives group
+       * fixed in place and lay out only the actual alternative items.
+       * The tree grows to the LEFT of the group, with the same compact
+       * two-column / multi-row structure used by Discussions.
+       */
+      const alternativeGroup = visibleNodeList.find(
+        (node) => node.metadata?.group === "alternatives",
       );
 
-      /*
-       * Alternatives branch:
-       * spread downward and toward the left so the
-       * options read as a dedicated branch rather
-       * than a horizontal row across the canvas.
-       */
-      alternativeChildren.forEach((node, index) => {
-        positions[node.id] = {
-          ...node,
-          x: 560 - index * 200,
-          y: 955 + index * 135,
-        };
-      });
+      const alternativeChildren = visibleNodeList.filter(
+        (node) => node.type === "alternative" && !node.metadata?.group,
+      );
+
+      if (alternativeGroup && alternativeChildren.length) {
+        const anchor = positions[alternativeGroup.id];
+
+        const columns = 2;
+        const stepX = 210;
+        const stepY = 125;
+        const rows = Math.ceil(alternativeChildren.length / columns);
+
+        /* Mirror Discussions horizontally: children grow LEFT. */
+        const startX = anchor.x - 220;
+        const startY = anchor.y - ((rows - 1) * stepY) / 2;
+
+        alternativeChildren.forEach((node, index) => {
+          const column = index % columns;
+
+          const row = Math.floor(index / columns);
+
+          positions[node.id] = {
+            ...node,
+            x: startX - column * stepX,
+            y: startY + row * stepY,
+          };
+        });
+      }
     }
 
     if (expanded.discussions) {
-      placeGrid({
-        items: visibleNodeList.filter((node) => node.type === "discussion"),
-        startX: 920,
-        startY: 985,
-        columns: 4,
-        stepX: 210,
-        stepY: 110,
-      });
+      /*
+       * Keep the Discussions group fixed in place.
+       * Only the actual discussion children are laid out.
+       * They grow to the RIGHT of the group in a compact tree.
+       */
+      const discussionGroup = visibleNodeList.find(
+        (node) => node.metadata?.group === "discussions",
+      );
+
+      const discussionChildren = visibleNodeList.filter(
+        (node) => node.type === "discussion" && !node.metadata?.group,
+      );
+
+      if (discussionGroup && discussionChildren.length) {
+        const anchor = positions[discussionGroup.id];
+
+        const columns = 2;
+        const stepX = 245;
+        const stepY = 125;
+        const rows = Math.ceil(discussionChildren.length / columns);
+
+        const startX = anchor.x + 250;
+        const startY = anchor.y - ((rows - 1) * stepY) / 2;
+
+        discussionChildren.forEach((node, index) => {
+          const column = index % columns;
+
+          const row = Math.floor(index / columns);
+
+          positions[node.id] = {
+            ...node,
+            x: startX + column * stepX,
+            y: startY + row * stepY,
+          };
+        });
+      }
     }
 
     return positions;
@@ -1069,7 +1118,7 @@ function KnowledgePage({
     const query = search.trim().toLowerCase();
 
     if (!query) {
-      return decisionOptions.slice(0, 8).map((option) => ({
+      return decisionOptions.map((option) => ({
         type: "decision",
         id: option.id,
         title: option.title,
@@ -1086,7 +1135,6 @@ function KnowledgePage({
           .toLowerCase()
           .includes(query),
       )
-      .slice(0, 10)
       .map((option) => ({
         type: "decision",
         id: option.id,
@@ -1112,13 +1160,6 @@ function KnowledgePage({
         // Give the expanded branch room by moving the world slightly.
         if (group === "documents") {
           setPan({ x: -90, y: 0 });
-        } else if (group === "alternatives") {
-          // The alternative branch grows down-left, so
-          // shift the world slightly right/up to keep it
-          // comfortably inside the visible viewport.
-          setPan({ x: 120, y: -130 });
-        } else if (group === "discussions") {
-          setPan({ x: 0, y: -135 });
         }
       }
 
@@ -1456,7 +1497,16 @@ function KnowledgePage({
               </button>
             </div>
           ) : (
-            <div className="knowledge-graph-layout-v6">
+            <div
+              className={`knowledge-graph-layout-v6 ${
+                selectedNode ? "" : "inspector-closed-v6"
+              }`}
+              style={
+                selectedNode
+                  ? undefined
+                  : { gridTemplateColumns: "minmax(0, 1fr)" }
+              }
+            >
               <div
                 className={`knowledge-graph-canvas-v6 ${
                   isPanning ? "is-panning" : ""
@@ -1628,8 +1678,8 @@ function KnowledgePage({
                 </div>
               </div>
 
-              <aside className="knowledge-graph-inspector-v6">
-                {selectedNode ? (
+              {selectedNode && (
+                <aside className="knowledge-graph-inspector-v6">
                   <div className="knowledge-graph-inspector-content-v6">
                     <div className="knowledge-graph-inspector-top-v6">
                       <div>
@@ -1881,17 +1931,8 @@ function KnowledgePage({
                       <ArrowUpRight size={14} />
                     </button>
                   </div>
-                ) : (
-                  <div className="knowledge-graph-inspector-empty-v6">
-                    <Network size={22} />
-                    <strong>Select a node</strong>
-                    <span>
-                      Click the decision, a branch, or any connected item to
-                      inspect it here.
-                    </span>
-                  </div>
-                )}
-              </aside>
+                </aside>
+              )}
             </div>
           )}
         </div>
