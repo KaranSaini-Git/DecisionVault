@@ -22,6 +22,10 @@ import {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+const KNOWLEDGE_GRAPH_WIDTH = 1800;
+const KNOWLEDGE_GRAPH_HEIGHT = 1300;
+const KNOWLEDGE_GRAPH_DEFAULT_ZOOM = 1;
+
 const formatDate = (value) => {
   if (!value) return "—";
   const date = new Date(value);
@@ -739,7 +743,12 @@ function KnowledgePage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedNode, setSelectedNode] = useState(null);
-  const [zoom, setZoom] = useState(1);
+  const [expanded, setExpanded] = useState({
+    documents: false,
+    alternatives: false,
+    discussions: false,
+  });
+  const [zoom, setZoom] = useState(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -749,34 +758,30 @@ function KnowledgePage({
     panX: 0,
     panY: 0,
   });
-  const loadedInitialDecisionRef = useRef(false);
 
   const searchDecisions = async (value) => {
     try {
       setSearching(true);
+      setError("");
+
       const query = value.trim();
       const endpoint = query
         ? `/api/knowledge/graph?search=${encodeURIComponent(query)}`
         : "/api/knowledge/graph";
-      const data = await apiRequest(endpoint);
 
+      const data = await apiRequest(endpoint);
       const options = Array.isArray(data?.decisionOptions)
         ? data.decisionOptions
         : [];
 
       setDecisionOptions(options);
-      setError("");
 
-      if (!loadedInitialDecisionRef.current && data?.recommendedDecisionId) {
-        loadedInitialDecisionRef.current = true;
+      if (!selectedDecisionId && data?.recommendedDecisionId) {
         await loadGraph(data.recommendedDecisionId);
       }
     } catch (searchError) {
       console.error("Knowledge graph search error:", searchError);
-      setDecisionOptions([]);
-      if (!selectedDecisionId) {
-        setError(searchError.message || "Unable to load the knowledge graph.");
-      }
+      setError(searchError.message || "Unable to load the knowledge graph.");
     } finally {
       setSearching(false);
     }
@@ -788,12 +793,15 @@ function KnowledgePage({
       setError("");
 
       const id = Number(decisionId);
+
       if (!Number.isInteger(id) || id <= 0) {
         throw new Error("Invalid decision ID.");
       }
 
       const data = await apiRequest(`/api/knowledge/graph?decisionId=${id}`);
+
       const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+
       const root = nodes.find(
         (node) => node.type === "decision" && Number(node.entityId) === id,
       );
@@ -804,10 +812,14 @@ function KnowledgePage({
         edges: Array.isArray(data?.edges) ? data.edges : [],
       });
       setSelectedNode(root || null);
-      setZoom(1);
+      setExpanded({
+        documents: false,
+        alternatives: false,
+        discussions: false,
+      });
+      setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
       setPan({ x: 0, y: 0 });
       setSearchFocused(false);
-      loadedInitialDecisionRef.current = true;
     } catch (loadError) {
       console.error("Knowledge graph load error:", loadError);
       setError(loadError.message || "Unable to load the knowledge graph.");
@@ -842,30 +854,46 @@ function KnowledgePage({
       Number(node.entityId) === Number(selectedDecisionId),
   );
 
-  const graphNodes = useMemo(() => {
-    const allowed = new Set([
-      "decision",
-      "person",
-      "team",
-      "document",
-      "alternative",
-      "discussion",
-    ]);
+  const visibleNodeList = useMemo(() => {
+    const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
 
-    return graph.nodes.filter((node) => allowed.has(node.type));
-  }, [graph.nodes]);
+    return nodes.filter((node) => {
+      if (node.type === "decision") return true;
+      if (node.metadata?.group === "documents") {
+        return true;
+      }
+      if (node.metadata?.group === "alternatives") {
+        return true;
+      }
+      if (node.metadata?.group === "discussions") {
+        return true;
+      }
+      if (node.type === "person" || node.type === "team") {
+        return true;
+      }
+      if (node.type === "document") {
+        return expanded.documents;
+      }
+      if (node.type === "alternative") {
+        return expanded.alternatives;
+      }
+      if (node.type === "discussion") {
+        return expanded.discussions;
+      }
+      return false;
+    });
+  }, [graph.nodes, expanded]);
 
   const visibleNodeIds = useMemo(
-    () => new Set(graphNodes.map((node) => node.id)),
-    [graphNodes],
+    () => new Set(visibleNodeList.map((node) => node.id)),
+    [visibleNodeList],
   );
 
   const visibleEdges = useMemo(
     () =>
       graph.edges.filter(
         (edge) =>
-          visibleNodeIds.has(edge.source) &&
-          visibleNodeIds.has(edge.target),
+          visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target),
       ),
     [graph.edges, visibleNodeIds],
   );
@@ -876,8 +904,12 @@ function KnowledgePage({
     const ids = new Set([selectedNode.id]);
 
     visibleEdges.forEach((edge) => {
-      if (edge.source === selectedNode.id) ids.add(edge.target);
-      if (edge.target === selectedNode.id) ids.add(edge.source);
+      if (edge.source === selectedNode.id) {
+        ids.add(edge.target);
+      }
+      if (edge.target === selectedNode.id) {
+        ids.add(edge.source);
+      }
     });
 
     return ids;
@@ -886,57 +918,116 @@ function KnowledgePage({
   const nodePositions = useMemo(() => {
     if (!selectedDecision) return {};
 
-    const byType = {
-      person: graphNodes.filter((node) => node.type === "person").slice(0, 1),
-      team: graphNodes.filter((node) => node.type === "team").slice(0, 1),
-      document: graphNodes.filter((node) => node.type === "document").slice(0, 1),
-      alternative: graphNodes
-        .filter((node) => node.type === "alternative")
-        .slice(0, 1),
-      discussion: graphNodes
-        .filter((node) => node.type === "discussion")
-        .slice(0, 1),
+    const WIDTH = KNOWLEDGE_GRAPH_WIDTH;
+    const HEIGHT = KNOWLEDGE_GRAPH_HEIGHT;
+    const CENTER_X = WIDTH / 2;
+    const CENTER_Y = HEIGHT / 2;
+
+    const positions = {};
+
+    positions[selectedDecision.id] = {
+      ...selectedDecision,
+      x: CENTER_X,
+      y: CENTER_Y,
     };
 
-    const slots = [
-      ["person", 20, 25],
-      ["team", 20, 75],
-      ["document", 80, 25],
-      ["discussion", 80, 75],
-      ["alternative", 50, 84],
-    ];
-
-    const positions = {
-      [selectedDecision.id]: {
-        ...selectedDecision,
-        x: 50,
-        y: 50,
-      },
+    const groups = {
+      person: visibleNodeList.find((node) => node.type === "person"),
+      team: visibleNodeList.find((node) => node.type === "team"),
+      documents: visibleNodeList.find(
+        (node) => node.metadata?.group === "documents",
+      ),
+      alternatives: visibleNodeList.find(
+        (node) => node.metadata?.group === "alternatives",
+      ),
+      discussions: visibleNodeList.find(
+        (node) => node.metadata?.group === "discussions",
+      ),
     };
 
-    slots.forEach(([type, x, y]) => {
-      const node = byType[type]?.[0];
+    // Keep every first-degree group inside the initial viewport.
+    const groupPositions = {
+      // Keep the complete first-degree map inside the 100% viewport.
+      person: [CENTER_X, 465],
+      team: [630, CENTER_Y],
+      documents: [1170, CENTER_Y],
+      alternatives: [560, 820],
+      discussions: [1240, 820],
+    };
+
+    Object.entries(groups).forEach(([key, node]) => {
       if (!node) return;
-
-      positions[node.id] = {
-        ...node,
-        x,
-        y,
-      };
+      const [x, y] = groupPositions[key];
+      positions[node.id] = { ...node, x, y };
     });
 
-    return positions;
-  }, [graphNodes, selectedDecision]);
+    const placeGrid = ({ items, startX, startY, columns, stepX, stepY }) => {
+      items.forEach((node, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        positions[node.id] = {
+          ...node,
+          x: startX + column * stepX,
+          y: startY + row * stepY,
+        };
+      });
+    };
 
-  const visibleNodeList = Object.values(nodePositions);
+    // Children fan away from their group instead of stacking on top of it.
+    if (expanded.documents) {
+      placeGrid({
+        items: visibleNodeList.filter((node) => node.type === "document"),
+        startX: 1330,
+        startY: 430,
+        columns: 2,
+        stepX: 205,
+        stepY: 105,
+      });
+    }
+
+    if (expanded.alternatives) {
+      const alternativeChildren = visibleNodeList.filter(
+        (node) => node.type === "alternative",
+      );
+
+      /*
+       * Alternatives branch:
+       * spread downward and toward the left so the
+       * options read as a dedicated branch rather
+       * than a horizontal row across the canvas.
+       */
+      alternativeChildren.forEach((node, index) => {
+        positions[node.id] = {
+          ...node,
+          x: 560 - index * 200,
+          y: 955 + index * 135,
+        };
+      });
+    }
+
+    if (expanded.discussions) {
+      placeGrid({
+        items: visibleNodeList.filter((node) => node.type === "discussion"),
+        startX: 920,
+        startY: 985,
+        columns: 4,
+        stepX: 210,
+        stepY: 110,
+      });
+    }
+
+    return positions;
+  }, [visibleNodeList, selectedDecision, expanded]);
+
+  const renderedEdges = visibleEdges;
 
   const filterOptions = [
     ["all", "All"],
     ["documents", "Documents"],
     ["people", "Created by"],
     ["teams", "Team"],
-    ["alternatives", "Alternative"],
-    ["discussions", "Discussion"],
+    ["alternatives", "Alternatives"],
+    ["discussions", "Discussions"],
   ];
 
   const filterTypeMap = {
@@ -948,18 +1039,28 @@ function KnowledgePage({
   };
 
   const filteredNodeIds = useMemo(() => {
-    if (filter === "all") return visibleNodeIds;
+    if (filter === "all") {
+      return visibleNodeIds;
+    }
 
     const ids = new Set();
+
     visibleNodeList.forEach((node) => {
-      if (node.type === "decision" || node.type === filterTypeMap[filter]) {
+      const isGroupForFilter = node.metadata?.group === filter;
+
+      if (
+        node.type === "decision" ||
+        node.type === filterTypeMap[filter] ||
+        isGroupForFilter
+      ) {
         ids.add(node.id);
       }
     });
+
     return ids;
   }, [filter, visibleNodeIds, visibleNodeList]);
 
-  const renderedEdges = visibleEdges.filter(
+  const finalEdges = renderedEdges.filter(
     (edge) =>
       filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target),
   );
@@ -977,45 +1078,116 @@ function KnowledgePage({
       }));
     }
 
-    const results = [];
-    decisionOptions.forEach((option) => {
-      const text = [
-        option.title,
-        option.status,
-        option.team?.name,
-        option.createdBy?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      if (text.includes(query)) {
-        results.push({
-          type: "decision",
-          id: option.id,
-          title: option.title,
-          subtitle: `${statusLabel(option.status)} · ${option.team?.name || "Unassigned"}`,
-          decisionId: option.id,
-        });
-      }
-    });
-
-    return results.slice(0, 10);
+    return decisionOptions
+      .filter((option) =>
+        [option.title, option.status, option.team?.name, option.createdBy?.name]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      )
+      .slice(0, 10)
+      .map((option) => ({
+        type: "decision",
+        id: option.id,
+        title: option.title,
+        subtitle: `${statusLabel(option.status)} · ${option.team?.name || "Unassigned"}`,
+        decisionId: option.id,
+      }));
   }, [decisionOptions, search]);
 
-  const handleSearchResult = (result) => {
-    loadGraph(result.decisionId);
+  const toggleGroup = (group) => {
+    setExpanded((current) => {
+      const next = {
+        ...current,
+        [group]: !current[group],
+      };
+
+      const anyExpanded = Object.values(next).some(Boolean);
+
+      if (!anyExpanded) {
+        setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
+        setPan({ x: 0, y: 0 });
+      } else if (!current[group]) {
+        // Give the expanded branch room by moving the world slightly.
+        if (group === "documents") {
+          setPan({ x: -90, y: 0 });
+        } else if (group === "alternatives") {
+          // The alternative branch grows down-left, so
+          // shift the world slightly right/up to keep it
+          // comfortably inside the visible viewport.
+          setPan({ x: 120, y: -130 });
+        } else if (group === "discussions") {
+          setPan({ x: 0, y: -135 });
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpanded({
+      documents: true,
+      alternatives: true,
+      discussions: true,
+    });
+    setZoom(0.6);
+    setPan({ x: 0, y: -125 });
+  };
+
+  const collapseAll = () => {
+    setExpanded({
+      documents: false,
+      alternatives: false,
+      discussions: false,
+    });
+    setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
+    setPan({ x: 0, y: 0 });
   };
 
   const handleNodeClick = (node) => {
     setSelectedNode(node);
+
+    if (node.metadata?.group) {
+      toggleGroup(node.metadata.group);
+    }
   };
 
   const handleOpenNode = (node) => {
     if (!node) return;
 
+    if (node.metadata?.group) {
+      const decisionId = Number(
+        node.metadata?.decisionId || selectedDecision?.entityId,
+      );
+
+      if (!decisionId || typeof openDecision !== "function") {
+        return;
+      }
+
+      const decision = decisionOptions.find(
+        (item) => Number(item.id) === decisionId,
+      ) || {
+        id: decisionId,
+        title: selectedDecision?.label || "Decision",
+        status: selectedDecision?.subtitle || "Draft",
+      };
+
+      const tab =
+        node.metadata.group === "documents"
+          ? "documents"
+          : node.metadata.group === "alternatives"
+            ? "alternatives"
+            : "discussion";
+
+      openDecision(decision, tab);
+      return;
+    }
+
     if (node.type === "document") {
       const filePath = node.metadata?.filePath;
+
       if (!filePath) return;
 
       window.open(
@@ -1037,14 +1209,17 @@ function KnowledgePage({
       node.metadata?.decisionId || selectedDecision?.entityId,
     );
 
-    if (!decisionId || typeof openDecision !== "function") return;
+    if (!decisionId || typeof openDecision !== "function") {
+      return;
+    }
 
-    const decision =
-      decisionOptions.find((item) => Number(item.id) === decisionId) || {
-        id: decisionId,
-        title: selectedDecision?.label || "Decision",
-        status: selectedDecision?.subtitle || "Draft",
-      };
+    const decision = decisionOptions.find(
+      (item) => Number(item.id) === decisionId,
+    ) || {
+      id: decisionId,
+      title: selectedDecision?.label || "Decision",
+      status: selectedDecision?.subtitle || "Draft",
+    };
 
     const tab =
       node.type === "alternative"
@@ -1057,15 +1232,21 @@ function KnowledgePage({
   };
 
   const handleCanvasPointerDown = (event) => {
-    if (event.target.closest("button, a, input")) return;
+    if (event.target.closest("button, a, input, select, textarea")) {
+      return;
+    }
+
+    event.preventDefault();
 
     setIsPanning(true);
+
     dragRef.current = {
       x: event.clientX,
       y: event.clientY,
       panX: pan.x,
       panY: pan.y,
     };
+
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
@@ -1080,6 +1261,7 @@ function KnowledgePage({
 
   const stopPanning = (event) => {
     if (!isPanning) return;
+
     setIsPanning(false);
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
@@ -1093,42 +1275,77 @@ function KnowledgePage({
     discussion: "Open Discussion",
   }[selectedNode?.type];
 
+  const groupActionLabel = {
+    documents: "Open Documents",
+    alternatives: "Open Alternatives",
+    discussions: "Open Discussions",
+  }[selectedNode?.metadata?.group];
+
   const selectedDescription = selectedNode?.metadata?.problemStatement;
 
+  const groupCount = selectedNode?.metadata?.group
+    ? selectedNode?.metadata?.count || 0
+    : 0;
+
   return (
-    <section className="workspace-page full-module-page knowledge-graph-page-v5">
-      <div className="workspace-page-header">
+    <section className="workspace-page full-module-page knowledge-graph-page-v6">
+      <div className="knowledge-graph-heading-v6">
         <div>
           <span className="section-label">KNOWLEDGE</span>
           <h1>Knowledge Graph</h1>
-          <p>Explore how one decision connects to the knowledge around it.</p>
+          <p>
+            Explore how decisions connect to people, teams, documents,
+            alternatives and discussions.
+          </p>
+        </div>
+
+        <div className="knowledge-graph-heading-actions-v6">
+          <button
+            type="button"
+            className="knowledge-graph-soft-button-v6"
+            onClick={() => {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }}
+          >
+            <Maximize2 size={14} />
+            Reset view
+          </button>
+
+          <button
+            type="button"
+            className="knowledge-graph-primary-button-v6"
+            onClick={expandAll}
+          >
+            <Plus size={14} />
+            Expand all
+          </button>
         </div>
       </div>
 
-      <div className="knowledge-graph-search-card knowledge-graph-search-card-v4">
-        <div className="knowledge-graph-search-main">
-          <Search size={17} />
-          <input
-            value={search}
-            onFocus={() => setSearchFocused(true)}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search decisions..."
-            aria-label="Search decisions"
-          />
-          {searching && (
-            <span className="knowledge-graph-search-status">Searching…</span>
-          )}
-        </div>
+      <div className="knowledge-graph-search-card-v6">
+        <Search size={17} />
+        <input
+          value={search}
+          onFocus={() => setSearchFocused(true)}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search decisions..."
+          aria-label="Search decisions"
+        />
+        {searching && <span>Searching…</span>}
 
         {searchFocused && (
-          <div className="knowledge-graph-search-results knowledge-graph-search-results-v4">
+          <div className="knowledge-graph-search-results-v6">
             {searchMatches.map((result) => (
               <button
                 type="button"
                 key={`${result.type}:${result.id}`}
-                onClick={() => handleSearchResult(result)}
+                onClick={() => {
+                  setSearchFocused(false);
+                  loadGraph(result.decisionId);
+                }}
               >
-                <span className="knowledge-graph-result-icon">
+                <span className="knowledge-graph-result-icon-v6">
                   <GitBranch size={14} />
                 </span>
                 <span>
@@ -1143,89 +1360,74 @@ function KnowledgePage({
       </div>
 
       {!selectedDecisionId ? (
-        <div className="knowledge-graph-empty-card">
-          <div className="module-empty-icon">
-            <Network size={20} />
-          </div>
-          <strong>{error ? "Knowledge Graph unavailable" : "Choose a decision"}</strong>
+        <div className="knowledge-graph-empty-v6">
+          <Network size={24} />
+          <strong>
+            {error ? "Knowledge Graph unavailable" : "Choose a decision"}
+          </strong>
           <span>
             {error ||
               "Search above to open a decision and explore its connected knowledge."}
           </span>
+
           {error && (
-            <button
-              type="button"
-              className="knowledge-graph-empty-action"
-              onClick={() => searchDecisions("")}
-            >
+            <button type="button" onClick={() => searchDecisions("")}>
               Try again
             </button>
           )}
         </div>
       ) : (
-        <div className="knowledge-graph-card-v3 knowledge-graph-card-v5">
-          <div className="knowledge-graph-toolbar-v3 knowledge-graph-toolbar-v5">
-            <div>
+        <div className="knowledge-graph-shell-v6">
+          <div className="knowledge-graph-toolbar-v6">
+            <div className="knowledge-graph-toolbar-copy-v6">
               <span className="section-label">IMPORTANT DECISION</span>
               <strong>{selectedDecision?.label || "Decision"}</strong>
-              <small>{visibleNodeList.length - 1} direct relationships</small>
+              <small>{visibleNodeList.length - 1} connected items shown</small>
             </div>
 
-            <div className="knowledge-graph-toolbar-actions">
+            <div className="knowledge-graph-toolbar-actions-v6">
               <button
                 type="button"
-                onClick={() =>
-                  setZoom((value) =>
-                    Math.max(0.8, Number((value - 0.1).toFixed(2))),
-                  )
-                }
-                aria-label="Zoom out"
+                className="knowledge-graph-soft-button-v6"
+                onClick={collapseAll}
               >
-                <Minus size={14} />
+                Collapse
               </button>
-              <span>{Math.round(zoom * 100)}%</span>
+
               <button
                 type="button"
-                onClick={() =>
-                  setZoom((value) =>
-                    Math.min(1.3, Number((value + 0.1).toFixed(2))),
-                  )
-                }
-                aria-label="Zoom in"
-              >
-                <Plus size={14} />
-              </button>
-              <button
-                type="button"
+                className="knowledge-graph-soft-button-v6"
                 onClick={() => {
-                  setZoom(1);
+                  setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
                   setPan({ x: 0, y: 0 });
                 }}
-                aria-label="Reset view"
               >
                 <Maximize2 size={14} />
+                Fit
               </button>
             </div>
           </div>
 
-          <div className="knowledge-graph-filter-bar-v5">
+          <div className="knowledge-graph-filters-v6">
             <span>SHOW</span>
             {filterOptions.map(([value, label]) => {
               const count =
                 value === "all"
                   ? visibleNodeList.length - 1
                   : visibleNodeList.filter(
-                      (node) => node.type === filterTypeMap[value],
+                      (node) =>
+                        node.type === filterTypeMap[value] ||
+                        node.metadata?.group === value,
                     ).length;
 
               return (
                 <button
-                  key={value}
                   type="button"
+                  key={value}
                   className={filter === value ? "active" : ""}
                   onClick={() => setFilter(value)}
                 >
-                  <i className={`filter-dot filter-${value}`} />
+                  <i />
                   {label}
                   {count > 0 && <b>{count}</b>}
                 </button>
@@ -1234,47 +1436,59 @@ function KnowledgePage({
           </div>
 
           {loading ? (
-            <div className="knowledge-graph-inline-loading knowledge-graph-loading-v5">
-              <div className="knowledge-graph-loading-orbit" />
+            <div className="knowledge-graph-state-v6">
+              <div className="knowledge-graph-loading-orbit-v6" />
               <strong>Building knowledge graph…</strong>
-              <span>Connecting the selected decision to its direct knowledge.</span>
+              <span>
+                Connecting the selected decision to its direct knowledge.
+              </span>
             </div>
           ) : error ? (
-            <div className="knowledge-graph-inline-error">
-              <X size={18} />
+            <div className="knowledge-graph-state-v6">
+              <X size={20} />
               <strong>Knowledge Graph unavailable</strong>
               <span>{error}</span>
-              <button type="button" onClick={() => loadGraph(selectedDecisionId)}>
+              <button
+                type="button"
+                onClick={() => loadGraph(selectedDecisionId)}
+              >
                 Try again
               </button>
             </div>
           ) : (
-            <div className="knowledge-graph-main-v4 knowledge-graph-main-v5">
+            <div className="knowledge-graph-layout-v6">
               <div
-                className={`knowledge-graph-canvas-v4 knowledge-graph-canvas-v5 ${
+                className={`knowledge-graph-canvas-v6 ${
                   isPanning ? "is-panning" : ""
                 }`}
                 onPointerDown={handleCanvasPointerDown}
                 onPointerMove={handleCanvasPointerMove}
                 onPointerUp={stopPanning}
                 onPointerCancel={stopPanning}
+                onSelectStart={(event) => event.preventDefault()}
+                onDragStart={(event) => event.preventDefault()}
               >
                 <div
-                  className="knowledge-graph-stage-v4 knowledge-graph-stage-v5"
+                  className="knowledge-graph-stage-v6"
                   style={{
-                    transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                    width: `${KNOWLEDGE_GRAPH_WIDTH}px`,
+                    height: `${KNOWLEDGE_GRAPH_HEIGHT}px`,
+                    transform: `translate(-50%, -50%) translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                   }}
                 >
                   <svg
-                    className="knowledge-graph-edges-v4 knowledge-graph-edges-v5"
-                    viewBox="0 0 100 100"
+                    className="knowledge-graph-edges-v6"
+                    viewBox={`0 0 ${KNOWLEDGE_GRAPH_WIDTH} ${KNOWLEDGE_GRAPH_HEIGHT}`}
                     preserveAspectRatio="none"
                     aria-hidden="true"
                   >
-                    {renderedEdges.map((edge) => {
+                    {finalEdges.map((edge) => {
                       const source = nodePositions[edge.source];
                       const target = nodePositions[edge.target];
-                      if (!source || !target) return null;
+
+                      if (!source || !target) {
+                        return null;
+                      }
 
                       const connected =
                         connectedNodeIds.has(edge.source) &&
@@ -1285,17 +1499,17 @@ function KnowledgePage({
                       const length = Math.max(1, Math.hypot(dx, dy));
                       const normalX = -dy / length;
                       const normalY = dx / length;
-                      const bend = Math.min(5, Math.max(2.2, length * 0.08));
-                      const mx = (source.x + target.x) / 2;
-                      const my = (source.y + target.y) / 2;
-                      const cx = mx + normalX * bend;
-                      const cy = my + normalY * bend;
+                      const bend = Math.min(100, Math.max(30, length * 0.09));
+                      const midX = (source.x + target.x) / 2;
+                      const midY = (source.y + target.y) / 2;
+                      const controlX = midX + normalX * bend;
+                      const controlY = midY + normalY * bend;
 
                       return (
                         <path
                           key={edge.id}
-                          d={`M ${source.x} ${source.y} Q ${cx} ${cy} ${target.x} ${target.y}`}
-                          className={`knowledge-graph-edge-v5 ${
+                          d={`M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`}
+                          className={`knowledge-graph-edge-v6 ${
                             connected ? "active" : ""
                           }`}
                         />
@@ -1304,197 +1518,376 @@ function KnowledgePage({
                   </svg>
 
                   {visibleNodeList.map((node) => {
+                    const position = nodePositions[node.id];
+
+                    if (!position) {
+                      return null;
+                    }
+
                     const visible = filteredNodeIds.has(node.id);
                     const connected = connectedNodeIds.has(node.id);
-                    const muted = selectedNode && !connected;
+                    const muted =
+                      selectedNode && !connected && selectedNode.id !== node.id;
+                    const isGroup = Boolean(node.metadata?.group);
+                    const group = node.metadata?.group;
 
                     return (
                       <button
                         type="button"
                         key={node.id}
-                        className={`knowledge-graph-node-v5 node-${node.type} ${
-                          selectedNode?.id === node.id ? "selected" : ""
-                        } ${connected ? "connected" : ""} ${muted ? "muted" : ""}`}
+                        className={`knowledge-graph-node-v6 node-${node.type} ${
+                          isGroup ? "group-node" : ""
+                        } ${selectedNode?.id === node.id ? "selected" : ""} ${
+                          muted ? "muted" : ""
+                        }`}
                         style={{
-                          left: `${node.x}%`,
-                          top: `${node.y}%`,
+                          left: `${position.x}px`,
+                          top: `${position.y}px`,
                           display: visible ? "flex" : "none",
                         }}
                         onClick={() => handleNodeClick(node)}
                       >
-                        <span className="knowledge-graph-node-icon-v5">
-                          {node.type === "document" ? (
-                            <FileText size={14} />
-                          ) : node.type === "team" || node.type === "person" ? (
-                            <Users size={14} />
-                          ) : node.type === "alternative" ? (
-                            <GitBranch size={14} />
-                          ) : node.type === "discussion" ? (
-                            <MessageCircle size={14} />
-                          ) : (
+                        <span className="knowledge-graph-node-icon-v6">
+                          {node.type === "document" || group === "documents" ? (
+                            <FileText size={15} />
+                          ) : node.type === "team" ? (
+                            <Users size={15} />
+                          ) : node.type === "person" ? (
+                            <Users size={15} />
+                          ) : node.type === "alternative" ||
+                            group === "alternatives" ? (
                             <GitBranch size={15} />
+                          ) : node.type === "discussion" ||
+                            group === "discussions" ? (
+                            <MessageCircle size={15} />
+                          ) : (
+                            <GitBranch size={16} />
                           )}
                         </span>
-                        <span className="knowledge-graph-node-copy-v5">
+
+                        <span className="knowledge-graph-node-copy-v6">
                           <strong title={node.label}>{node.label}</strong>
                           <small>{node.subtitle}</small>
                         </span>
+
+                        {isGroup && (
+                          <span className="knowledge-graph-node-expand-v6">
+                            {expanded[group] ? "−" : "+"}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="knowledge-graph-canvas-hint-v5">
-                  Drag to pan · Click a node to inspect
+                <div className="knowledge-graph-zoom-v6">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setZoom((value) =>
+                        Math.min(1.35, Number((value + 0.1).toFixed(2))),
+                      )
+                    }
+                    aria-label="Zoom in"
+                  >
+                    <Plus size={14} />
+                  </button>
+                  <span>{Math.round(zoom * 100)}%</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setZoom((value) =>
+                        Math.max(0.65, Number((value - 0.1).toFixed(2))),
+                      )
+                    }
+                    aria-label="Zoom out"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
+                      setPan({ x: 0, y: 0 });
+                    }}
+                    aria-label="Reset view"
+                  >
+                    <Maximize2 size={14} />
+                  </button>
+                </div>
+
+                <div className="knowledge-graph-canvas-hint-v6">
+                  Drag to pan · Click a branch to expand · Click an item to
+                  inspect
+                </div>
+
+                <div className="knowledge-graph-live-v6">
+                  <span className="knowledge-graph-live-dot-v6" />
+                  {visibleNodeList.length} nodes · {finalEdges.length}{" "}
+                  connections
                 </div>
               </div>
 
-              <aside className="knowledge-graph-inspector-v5">
+              <aside className="knowledge-graph-inspector-v6">
                 {selectedNode ? (
-                  <div className="knowledge-graph-inspector-content-v5">
-                    <div className="knowledge-graph-inspector-type-v5">
-                      {selectedNode.type === "person"
-                        ? "CREATED BY"
-                        : selectedNode.type.toUpperCase()}
+                  <div className="knowledge-graph-inspector-content-v6">
+                    <div className="knowledge-graph-inspector-top-v6">
+                      <div>
+                        <span className="knowledge-graph-inspector-type-v6">
+                          {selectedNode.metadata?.group
+                            ? selectedNode.metadata.group.toUpperCase()
+                            : selectedNode.type === "person"
+                              ? "CREATED BY"
+                              : selectedNode.type.toUpperCase()}
+                        </span>
+                        <h2>{selectedNode.label}</h2>
+                        <p>{selectedNode.subtitle || "Connected knowledge"}</p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="knowledge-graph-inspector-close-v6"
+                        onClick={() => setSelectedNode(null)}
+                        aria-label="Close inspector"
+                      >
+                        <X size={16} />
+                      </button>
                     </div>
 
-                    <h2>{selectedNode.label}</h2>
-                    <p className="knowledge-graph-inspector-subtitle-v5">
-                      {selectedNode.subtitle}
-                    </p>
-
                     {selectedDescription && (
-                      <div className="knowledge-graph-inspector-description-v5">
+                      <div className="knowledge-graph-description-v6">
                         {selectedDescription}
                       </div>
                     )}
 
+                    {selectedNode.metadata?.group && (
+                      <>
+                        <div className="knowledge-graph-inspector-count-v6">
+                          <strong>{groupCount}</strong>
+                          <span>connected {selectedNode.metadata.group}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="knowledge-graph-inspector-secondary-v6"
+                          onClick={() =>
+                            toggleGroup(selectedNode.metadata.group)
+                          }
+                        >
+                          {expanded[selectedNode.metadata.group]
+                            ? "Collapse branch"
+                            : "Expand branch"}
+                        </button>
+                      </>
+                    )}
+
                     {selectedNode.type === "decision" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
+                      <div className="knowledge-graph-data-grid-v6">
                         <div>
                           <span>Status</span>
-                          <strong>{statusLabel(selectedNode.metadata?.status)}</strong>
+                          <strong>
+                            {statusLabel(selectedNode.metadata?.status)}
+                          </strong>
                         </div>
                         <div>
                           <span>Team</span>
-                          <strong>{selectedNode.metadata?.teamName || "Unassigned"}</strong>
+                          <strong>
+                            {selectedNode.metadata?.teamName || "Unassigned"}
+                          </strong>
                         </div>
                         <div>
                           <span>Documents</span>
-                          <strong>{selectedNode.metadata?.documents || 0}</strong>
+                          <strong>
+                            {selectedNode.metadata?.documents || 0}
+                          </strong>
                         </div>
                         <div>
                           <span>Alternatives</span>
-                          <strong>{selectedNode.metadata?.alternatives || 0}</strong>
+                          <strong>
+                            {selectedNode.metadata?.alternatives || 0}
+                          </strong>
                         </div>
                         <div>
                           <span>Discussions</span>
-                          <strong>{selectedNode.metadata?.discussions || 0}</strong>
+                          <strong>
+                            {selectedNode.metadata?.discussions || 0}
+                          </strong>
                         </div>
                         <div>
                           <span>Created by</span>
-                          <strong>{selectedNode.metadata?.createdBy || "Unknown"}</strong>
+                          <strong>
+                            {selectedNode.metadata?.createdBy || "Unknown"}
+                          </strong>
                         </div>
                       </div>
                     )}
 
                     {selectedNode.type === "person" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
+                      <div className="knowledge-graph-data-grid-v6">
                         <div>
                           <span>Name</span>
-                          <strong>{selectedNode.metadata?.name || selectedNode.label}</strong>
+                          <strong>
+                            {selectedNode.metadata?.name || selectedNode.label}
+                          </strong>
                         </div>
                         <div>
                           <span>Role</span>
-                          <strong>{selectedNode.metadata?.role || selectedNode.subtitle}</strong>
+                          <strong>
+                            {selectedNode.metadata?.role ||
+                              selectedNode.subtitle}
+                          </strong>
                         </div>
+                        {selectedNode.metadata?.email && (
+                          <div className="wide">
+                            <span>Email</span>
+                            <strong>{selectedNode.metadata.email}</strong>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {selectedNode.type === "team" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
+                      <div className="knowledge-graph-data-grid-v6">
                         <div>
                           <span>Members</span>
-                          <strong>{selectedNode.metadata?.memberCount || 0}</strong>
+                          <strong>
+                            {selectedNode.metadata?.memberCount || 0}
+                          </strong>
                         </div>
                         <div>
                           <span>Decisions</span>
-                          <strong>{selectedNode.metadata?.decisionCount || 0}</strong>
+                          <strong>
+                            {selectedNode.metadata?.decisionCount || 0}
+                          </strong>
                         </div>
+                        {selectedNode.metadata?.description && (
+                          <div className="wide">
+                            <span>Description</span>
+                            <strong className="wrap">
+                              {selectedNode.metadata.description}
+                            </strong>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {selectedNode.type === "document" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
+                      <div className="knowledge-graph-data-grid-v6">
                         <div>
                           <span>File type</span>
-                          <strong>{selectedNode.metadata?.fileType || "FILE"}</strong>
+                          <strong>
+                            {selectedNode.metadata?.fileType || "FILE"}
+                          </strong>
                         </div>
                         <div>
                           <span>Category</span>
-                          <strong>{selectedNode.metadata?.category || "General"}</strong>
+                          <strong>
+                            {selectedNode.metadata?.category || "General"}
+                          </strong>
                         </div>
                         <div>
                           <span>Uploaded by</span>
-                          <strong>{selectedNode.metadata?.uploadedBy || "Workspace member"}</strong>
+                          <strong>
+                            {selectedNode.metadata?.uploadedBy ||
+                              "Workspace member"}
+                          </strong>
                         </div>
                         <div>
                           <span>Uploaded</span>
-                          <strong>{formatDate(selectedNode.metadata?.createdAt)}</strong>
+                          <strong>
+                            {formatDate(selectedNode.metadata?.createdAt)}
+                          </strong>
                         </div>
+                        {selectedNode.metadata?.tags && (
+                          <div className="wide">
+                            <span>Tags</span>
+                            <strong className="wrap">
+                              {selectedNode.metadata.tags}
+                            </strong>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {selectedNode.type === "alternative" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
-                        <div>
-                          <span>Risk</span>
-                          <strong>{selectedNode.metadata?.risk || "—"}</strong>
+                      <div className="knowledge-graph-rich-details-v6">
+                        <div className="knowledge-graph-detail-strip-v6">
+                          <div>
+                            <span>Risk</span>
+                            <strong>
+                              {selectedNode.metadata?.risk || "—"}
+                            </strong>
+                          </div>
+                          <div>
+                            <span>Feasibility</span>
+                            <strong>
+                              {selectedNode.metadata?.feasibility || "—"}
+                            </strong>
+                          </div>
+                          <div>
+                            <span>Cost</span>
+                            <strong>
+                              {selectedNode.metadata?.cost || "—"}
+                            </strong>
+                          </div>
                         </div>
-                        <div>
-                          <span>Feasibility</span>
-                          <strong>{selectedNode.metadata?.feasibility || "—"}</strong>
+
+                        <div className="knowledge-graph-text-card-v6">
+                          <span>Pros</span>
+                          <p>{selectedNode.metadata?.pros || "—"}</p>
                         </div>
-                        <div>
-                          <span>Cost</span>
-                          <strong>{selectedNode.metadata?.cost || "—"}</strong>
+
+                        <div className="knowledge-graph-text-card-v6">
+                          <span>Cons</span>
+                          <p>{selectedNode.metadata?.cons || "—"}</p>
                         </div>
                       </div>
                     )}
 
                     {selectedNode.type === "discussion" && (
-                      <div className="knowledge-graph-inspector-grid-v5">
-                        <div>
-                          <span>Type</span>
-                          <strong>{selectedNode.metadata?.type || "Comment"}</strong>
+                      <div className="knowledge-graph-rich-details-v6">
+                        <div className="knowledge-graph-detail-strip-v6">
+                          <div>
+                            <span>Type</span>
+                            <strong>
+                              {selectedNode.metadata?.type || "Comment"}
+                            </strong>
+                          </div>
+                          <div>
+                            <span>Created by</span>
+                            <strong>
+                              {selectedNode.metadata?.createdBy ||
+                                "Workspace member"}
+                            </strong>
+                          </div>
                         </div>
-                        <div>
-                          <span>Created by</span>
-                          <strong>{selectedNode.metadata?.createdBy || "Workspace member"}</strong>
-                        </div>
-                        <div>
-                          <span>Created</span>
-                          <strong>{formatDate(selectedNode.metadata?.createdAt)}</strong>
+
+                        <div className="knowledge-graph-text-card-v6 discussion-copy-v6">
+                          <span>Discussion</span>
+                          <p>
+                            {selectedNode.metadata?.content ||
+                              "No discussion content."}
+                          </p>
                         </div>
                       </div>
                     )}
 
                     <button
                       type="button"
-                      className="knowledge-graph-open-action-v5"
+                      className="knowledge-graph-open-action-v6"
                       onClick={() => handleOpenNode(selectedNode)}
                     >
-                      {openActionLabel || "Open"}
+                      {groupActionLabel || openActionLabel || "Open"}
                       <ArrowUpRight size={14} />
                     </button>
                   </div>
                 ) : (
-                  <div className="knowledge-graph-inspector-empty-v5">
-                    <Network size={20} />
+                  <div className="knowledge-graph-inspector-empty-v6">
+                    <Network size={22} />
                     <strong>Select a node</strong>
                     <span>
-                      Select the decision, creator, team, document, alternative,
-                      or discussion to inspect it here.
+                      Click the decision, a branch, or any connected item to
+                      inspect it here.
                     </span>
                   </div>
                 )}

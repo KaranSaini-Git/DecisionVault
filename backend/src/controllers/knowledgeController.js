@@ -390,7 +390,7 @@ const getKnowledgeGraph = async (req, res) => {
       orderBy: {
         updatedAt: "desc",
       },
-      take: 20,
+      take: 30,
     });
 
     if (decisionId === null) {
@@ -440,7 +440,7 @@ const getKnowledgeGraph = async (req, res) => {
           orderBy: {
             createdAt: "desc",
           },
-          take: 1,
+          take: 20,
         },
         discussions: {
           include: {
@@ -455,13 +455,13 @@ const getKnowledgeGraph = async (req, res) => {
           orderBy: {
             createdAt: "desc",
           },
-          take: 1,
+          take: 20,
         },
         alternatives: {
           orderBy: {
             id: "asc",
           },
-          take: 1,
+          take: 20,
         },
       },
     });
@@ -475,22 +475,52 @@ const getKnowledgeGraph = async (req, res) => {
       });
     }
 
+    const [documentCount, alternativeCount, discussionCount] =
+      await Promise.all([
+        prisma.document.count({
+          where: { decisionId: decision.id },
+        }),
+        prisma.alternative.count({
+          where: { decisionId: decision.id },
+        }),
+        prisma.discussion.count({
+          where: { decisionId: decision.id },
+        }),
+      ]);
+
     const nodes = [];
     const edges = [];
     const nodeIds = new Set();
+    const edgeIds = new Set();
 
     const addNode = (node) => {
-      if (!node?.id || nodeIds.has(node.id)) return;
+      if (!node?.id || nodeIds.has(node.id)) {
+        return;
+      }
+
       nodeIds.add(node.id);
       nodes.push(node);
     };
 
     const addEdge = (source, target, relationship, type) => {
-      if (!source || !target || source === target) return;
-      if (!nodeIds.has(source) || !nodeIds.has(target)) return;
+      if (!source || !target || source === target) {
+        return;
+      }
+
+      if (!nodeIds.has(source) || !nodeIds.has(target)) {
+        return;
+      }
+
+      const id = `${source}:${target}:${type}`;
+
+      if (edgeIds.has(id)) {
+        return;
+      }
+
+      edgeIds.add(id);
 
       edges.push({
-        id: `${source}:${target}:${type}`,
+        id,
         source,
         target,
         relationship,
@@ -518,34 +548,42 @@ const getKnowledgeGraph = async (req, res) => {
         createdById: decision.createdBy?.id || null,
         teamName: decision.team?.name || "Unassigned",
         teamId: decision.team?.id || null,
-        documents: await prisma.document.count({ where: { decisionId: decision.id } }),
-        alternatives: await prisma.alternative.count({ where: { decisionId: decision.id } }),
-        discussions: await prisma.discussion.count({ where: { decisionId: decision.id } }),
+        documents: documentCount,
+        alternatives: alternativeCount,
+        discussions: discussionCount,
       },
     });
 
     if (decision.createdBy) {
       const id = `person:${decision.createdBy.id}`;
+
       addNode({
         id,
         type: "person",
         label: decision.createdBy.name,
-        subtitle: decision.createdBy.role || "Workspace member",
+        subtitle: decision.createdBy.role || "Employee",
         entityId: decision.createdBy.id,
         priority: 95,
         metadata: {
           name: decision.createdBy.name,
-          role: decision.createdBy.role || "Workspace member",
+          role: decision.createdBy.role || "Employee",
           email: decision.createdBy.email,
           decisionId: decision.id,
           decisionTitle: decision.title,
         },
       });
-      addEdge(decisionNodeId, id, "created by", "created");
+
+      addEdge(
+        decisionNodeId,
+        id,
+        "created by",
+        "created",
+      );
     }
 
     if (decision.team) {
       const id = `team:${decision.team.id}`;
+
       addNode({
         id,
         type: "team",
@@ -555,46 +593,155 @@ const getKnowledgeGraph = async (req, res) => {
         priority: 92,
         metadata: {
           name: decision.team.name,
-          description: decision.team.description,
+          description: decision.team.description || "",
           memberCount: decision.team._count.members,
           decisionCount: decision.team._count.decisions,
           decisionId: decision.id,
           decisionTitle: decision.title,
         },
       });
-      addEdge(decisionNodeId, id, "belongs to", "team");
+
+      addEdge(
+        decisionNodeId,
+        id,
+        "belongs to",
+        "team",
+      );
     }
 
-    const document = decision.documents[0];
-    if (document) {
+    const groups = [
+      {
+        key: "documents",
+        label: "Documents",
+        subtitle: `${documentCount} ${documentCount === 1 ? "document" : "documents"}`,
+        iconType: "document",
+        count: documentCount,
+        relationship: "has documents",
+      },
+      {
+        key: "alternatives",
+        label: "Alternatives",
+        subtitle: `${alternativeCount} ${alternativeCount === 1 ? "alternative" : "alternatives"}`,
+        iconType: "alternative",
+        count: alternativeCount,
+        relationship: "has alternatives",
+      },
+      {
+        key: "discussions",
+        label: "Discussions",
+        subtitle: `${discussionCount} ${discussionCount === 1 ? "discussion" : "discussions"}`,
+        iconType: "discussion",
+        count: discussionCount,
+        relationship: "has discussions",
+      },
+    ];
+
+    groups.forEach((group) => {
+      const id = `group:${group.key}:${decision.id}`;
+
+      addNode({
+        id,
+        type:
+          group.iconType === "document"
+            ? "document"
+            : group.iconType === "alternative"
+              ? "alternative"
+              : "discussion",
+        label: group.label,
+        subtitle: group.subtitle,
+        entityId: decision.id,
+        priority: 90,
+        metadata: {
+          group: group.key,
+          count: group.count,
+          decisionId: decision.id,
+          decisionTitle: decision.title,
+        },
+      });
+
+      addEdge(
+        decisionNodeId,
+        id,
+        group.relationship,
+        group.key,
+      );
+    });
+
+    decision.documents.forEach((document) => {
       const id = `document:${document.id}`;
+      const groupId = `group:documents:${decision.id}`;
+
       addNode({
         id,
         type: "document",
         label: document.filename,
         subtitle: document.category || "General",
         entityId: document.id,
-        priority: 88,
+        priority: 70,
         metadata: {
           filename: document.filename,
           filePath: document.filePath,
           fileType:
-            String(document.filename).split(".").pop()?.toUpperCase() || "FILE",
+            String(document.filename)
+              .split(".")
+              .pop()
+              ?.toUpperCase() || "FILE",
           category: document.category || "General",
           tags: document.tags || "",
-          uploadedBy: document.uploadedBy?.name || "Workspace member",
-          uploadedById: document.uploadedBy?.id || null,
+          uploadedBy:
+            document.uploadedBy?.name ||
+            "Workspace member",
+          uploadedById:
+            document.uploadedBy?.id || null,
           createdAt: document.createdAt,
           decisionId: decision.id,
           decisionTitle: decision.title,
         },
       });
-      addEdge(decisionNodeId, id, "has document", "document");
-    }
 
-    const discussion = decision.discussions[0];
-    if (discussion) {
+      addEdge(
+        groupId,
+        id,
+        "contains",
+        "document-item",
+      );
+    });
+
+    decision.alternatives.forEach((alternative) => {
+      const id = `alternative:${alternative.id}`;
+      const groupId = `group:alternatives:${decision.id}`;
+
+      addNode({
+        id,
+        type: "alternative",
+        label: alternative.name,
+        subtitle: "Alternative",
+        entityId: alternative.id,
+        priority: 68,
+        metadata: {
+          name: alternative.name,
+          pros: alternative.pros || "",
+          cons: alternative.cons || "",
+          risk: alternative.risk || "",
+          feasibility: alternative.feasibility || "",
+          cost: alternative.cost || "",
+          decisionId: decision.id,
+          decisionTitle: decision.title,
+        },
+      });
+
+      addEdge(
+        groupId,
+        id,
+        "contains",
+        "alternative-item",
+      );
+    });
+
+    decision.discussions.forEach((discussion) => {
       const id = `discussion:${discussion.id}`;
+      const groupId = `group:discussions:${decision.id}`;
+
       const typeLabel =
         discussion.type === "MeetingNote"
           ? "Meeting note"
@@ -606,49 +753,37 @@ const getKnowledgeGraph = async (req, res) => {
         id,
         type: "discussion",
         label: typeLabel,
-        subtitle: discussion.createdBy?.name || "Workspace member",
+        subtitle:
+          discussion.createdBy?.name ||
+          "Workspace member",
         entityId: discussion.id,
-        priority: 84,
+        priority: 66,
         metadata: {
           type: discussion.type,
           content: discussion.content || "",
-          createdBy: discussion.createdBy?.name || "Workspace member",
-          createdById: discussion.createdBy?.id || null,
+          createdBy:
+            discussion.createdBy?.name ||
+            "Workspace member",
+          createdById:
+            discussion.createdBy?.id || null,
           createdAt: discussion.createdAt,
           decisionId: decision.id,
           decisionTitle: decision.title,
         },
       });
-      addEdge(decisionNodeId, id, "discussed in", "discussion");
-    }
 
-    const alternative = decision.alternatives[0];
-    if (alternative) {
-      const id = `alternative:${alternative.id}`;
-      addNode({
+      addEdge(
+        groupId,
         id,
-        type: "alternative",
-        label: alternative.name,
-        subtitle: "Alternative",
-        entityId: alternative.id,
-        priority: 80,
-        metadata: {
-          name: alternative.name,
-          pros: alternative.pros,
-          cons: alternative.cons,
-          risk: alternative.risk,
-          feasibility: alternative.feasibility,
-          cost: alternative.cost,
-          decisionId: decision.id,
-          decisionTitle: decision.title,
-        },
-      });
-      addEdge(decisionNodeId, id, "considered", "alternative");
-    }
+        "contains",
+        "discussion-item",
+      );
+    });
 
     return res.status(200).json({
       decisionOptions,
-      recommendedDecisionId: decisionOptions[0]?.id || null,
+      recommendedDecisionId:
+        decisionOptions[0]?.id || decision.id,
       focusDecisionId: decision.id,
       focusDecision: {
         id: decision.id,
