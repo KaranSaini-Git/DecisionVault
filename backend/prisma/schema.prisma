@@ -13,15 +13,15 @@ model User {
   email              String            @unique
   password           String
   role               Role
-  decisions          Decision[]
-  discussions        Discussion[]
-  approvalsToReview  Approval[]        @relation("ApprovalReviewer")
   approvalsRequested Approval[]        @relation("ApprovalRequester")
-  teamMemberships    TeamMember[]
-  notifications      Notification[]
+  approvalsToReview  Approval[]        @relation("ApprovalReviewer")
   auditLogs          AuditLog[]
-  uploadedDocuments  Document[]        @relation("DocumentUploader")
+  decisions          Decision[]
   decisionVersions   DecisionVersion[]
+  discussions        Discussion[]
+  uploadedDocuments  Document[]        @relation("DocumentUploader")
+  notifications      Notification[]
+  teamMemberships    TeamMember[]
 }
 
 model Decision {
@@ -30,17 +30,17 @@ model Decision {
   problemStatement String
   status           DecisionStatus    @default(Draft)
   createdById      Int
-  createdBy        User              @relation(fields: [createdById], references: [id])
-  teamId           Int?
-  team             Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+  teamId           Int?
   alternatives     Alternative[]
-  documents        Document[]
-  discussions      Discussion[]
   approvals        Approval[]
-  versions         DecisionVersion[]
   auditLogs        AuditLog[]
+  createdBy        User              @relation(fields: [createdById], references: [id])
+  team             Team?             @relation(fields: [teamId], references: [id])
+  versions         DecisionVersion[]
+  discussions      Discussion[]
+  documents        Document[]
 
   @@index([teamId])
   @@index([createdById])
@@ -63,38 +63,17 @@ model Document {
   id           Int      @id @default(autoincrement())
   filename     String
   filePath     String
+  decisionId   Int
+  createdAt    DateTime @default(now())
   category     String   @default("General")
   tags         String   @default("")
   uploadedById Int?
-  uploadedBy   User?    @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
-  decisionId   Int
   decision     Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
+  uploadedBy   User?    @relation("DocumentUploader", fields: [uploadedById], references: [id])
 
   @@index([decisionId])
   @@index([uploadedById])
   @@index([category])
-}
-
-enum Role {
-  Employee
-  Reviewer
-  Manager
-  Administrator
-}
-
-enum DecisionStatus {
-  Draft
-  UnderReview
-  Rejected
-  Approved
-  Archived
-}
-
-enum DiscussionType {
-  Comment
-  MeetingNote
-  Rationale
 }
 
 model Discussion {
@@ -102,15 +81,15 @@ model Discussion {
   content     String
   type        DiscussionType         @default(Comment)
   decisionId  Int
-  decision    Decision               @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   createdById Int
-  createdBy   User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
   parentId    Int?
-  parent      Discussion?            @relation("DiscussionThread", fields: [parentId], references: [id], onDelete: SetNull)
-  replies     Discussion[]           @relation("DiscussionThread")
-  attachments DiscussionAttachment[]
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
+  createdBy   User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  decision    Decision               @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  parent      Discussion?            @relation("DiscussionThread", fields: [parentId], references: [id])
+  replies     Discussion[]           @relation("DiscussionThread")
+  attachments DiscussionAttachment[]
 
   @@index([decisionId])
   @@index([createdById])
@@ -121,14 +100,8 @@ model DiscussionAttachment {
   filename     String
   filePath     String
   discussionId Int
-  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
-}
-
-enum ApprovalStatus {
-  Pending
-  Approved
-  Rejected
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
 }
 
 model Approval {
@@ -143,8 +116,8 @@ model Approval {
   updatedAt     DateTime       @updatedAt
   actedAt       DateTime?
   decision      Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  reviewer      User           @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
   requestedBy   User           @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewer      User           @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
 
   @@unique([decisionId, reviewerId, level])
   @@index([decisionId])
@@ -157,8 +130,8 @@ model Team {
   description String       @default("")
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-  members     TeamMember[]
   decisions   Decision[]
+  members     TeamMember[]
 }
 
 model TeamMember {
@@ -200,8 +173,8 @@ model AuditLog {
   teamId     Int?
   metadata   String    @default("")
   createdAt  DateTime  @default(now())
-  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  decision   Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  decision   Decision? @relation(fields: [decisionId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
   @@index([decisionId, createdAt])
@@ -218,9 +191,36 @@ model DecisionVersion {
   status           DecisionStatus
   changedById      Int
   createdAt        DateTime       @default(now())
-  decision         Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   changedBy        User           @relation(fields: [changedById], references: [id], onDelete: Cascade)
+  decision         Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
 
   @@unique([decisionId, version])
   @@index([decisionId, createdAt])
+}
+
+enum Role {
+  Employee
+  Reviewer
+  Manager
+  Administrator
+}
+
+enum DecisionStatus {
+  Draft
+  UnderReview
+  Rejected
+  Approved
+  Archived
+}
+
+enum DiscussionType {
+  Comment
+  MeetingNote
+  Rationale
+}
+
+enum ApprovalStatus {
+  Pending
+  Approved
+  Rejected
 }

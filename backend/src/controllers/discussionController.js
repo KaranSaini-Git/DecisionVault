@@ -21,6 +21,18 @@ const createDiscussion = async (req, res) => {
     const parsedDecisionId = Number(decisionId);
     const parsedParentId = parentId ? Number(parentId) : null;
 
+    if (!Number.isInteger(parsedDecisionId) || parsedDecisionId <= 0) {
+      return res.status(400).json({
+        message: "Invalid decision ID",
+      });
+    }
+
+    if (!req.user?.userId) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
+
     if (!content?.trim()) {
       return res.status(400).json({
         message: "Discussion content is required",
@@ -33,8 +45,6 @@ const createDiscussion = async (req, res) => {
       },
       select: {
         id: true,
-        createdById: true,
-        decision: { select: { createdById: true, teamId: true } },
       },
     });
 
@@ -73,15 +83,6 @@ const createDiscussion = async (req, res) => {
       include: discussionInclude,
     });
 
-    await logActivity({
-      userId: req.user.userId,
-      action: "DISCUSSION_CREATED",
-      entityType: "Discussion",
-      entityId: discussion.id,
-      decisionId: discussion.decisionId,
-      metadata: { type: discussion.type },
-    });
-
     return res.status(201).json({
       discussion,
     });
@@ -90,6 +91,7 @@ const createDiscussion = async (req, res) => {
 
     return res.status(500).json({
       message: "Failed to create discussion",
+      error: error.message,
     });
   }
 };

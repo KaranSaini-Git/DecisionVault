@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   BarChart3,
@@ -7,7 +7,12 @@ import {
   Clock3,
   FileText,
   FolderOpen,
+  GitBranch,
+  Maximize2,
   MessageCircle,
+  Minus,
+  Network,
+  Plus,
   Search,
   ShieldCheck,
   Users,
@@ -270,7 +275,12 @@ function ReviewsPage({
   );
 }
 
-function TeamsPage({ apiRequest, currentUser, globalSearch = "" }) {
+function TeamsPage({
+  apiRequest,
+  currentUser,
+  globalSearch = "",
+  initialTeamId = null,
+}) {
   const [teams, setTeams] = useState([]);
   const [selected, setSelected] = useState(null);
   const [users, setUsers] = useState([]);
@@ -318,6 +328,12 @@ function TeamsPage({ apiRequest, currentUser, globalSearch = "" }) {
     loadTeams();
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (initialTeamId) {
+      openTeam(Number(initialTeamId));
+    }
+  }, [initialTeamId]);
 
   const createTeam = async (event) => {
     event.preventDefault();
@@ -708,293 +724,785 @@ function TeamsPage({ apiRequest, currentUser, globalSearch = "" }) {
   );
 }
 
-function KnowledgePage({ apiRequest, globalSearch = "", openDecision }) {
-  const [decisions, setDecisions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function KnowledgePage({
+  apiRequest,
+  globalSearch = "",
+  openDecision,
+  openTeam,
+}) {
+  const [decisionOptions, setDecisionOptions] = useState([]);
+  const [selectedDecisionId, setSelectedDecisionId] = useState(null);
+  const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [search, setSearch] = useState(globalSearch);
-  const [expanded, setExpanded] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const dragRef = useRef({
+    x: 0,
+    y: 0,
+    panX: 0,
+    panY: 0,
+  });
+  const loadedInitialDecisionRef = useRef(false);
 
-  const load = async () => {
+  const searchDecisions = async (value) => {
+    try {
+      setSearching(true);
+      const query = value.trim();
+      const endpoint = query
+        ? `/api/knowledge/graph?search=${encodeURIComponent(query)}`
+        : "/api/knowledge/graph";
+      const data = await apiRequest(endpoint);
+
+      const options = Array.isArray(data?.decisionOptions)
+        ? data.decisionOptions
+        : [];
+
+      setDecisionOptions(options);
+      setError("");
+
+      if (!loadedInitialDecisionRef.current && data?.recommendedDecisionId) {
+        loadedInitialDecisionRef.current = true;
+        await loadGraph(data.recommendedDecisionId);
+      }
+    } catch (searchError) {
+      console.error("Knowledge graph search error:", searchError);
+      setDecisionOptions([]);
+      if (!selectedDecisionId) {
+        setError(searchError.message || "Unable to load the knowledge graph.");
+      }
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const loadGraph = async (decisionId) => {
     try {
       setLoading(true);
       setError("");
-      const data = await apiRequest(
-        "/api/knowledge?tab=decisions&page=1&pageSize=50",
+
+      const id = Number(decisionId);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw new Error("Invalid decision ID.");
+      }
+
+      const data = await apiRequest(`/api/knowledge/graph?decisionId=${id}`);
+      const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+      const root = nodes.find(
+        (node) => node.type === "decision" && Number(node.entityId) === id,
       );
-      setDecisions(data?.decisions || []);
-    } catch (requestError) {
-      setError(
-        requestError.message || "Unable to load the knowledge repository.",
-      );
-      setDecisions([]);
+
+      setSelectedDecisionId(id);
+      setGraph({
+        nodes,
+        edges: Array.isArray(data?.edges) ? data.edges : [],
+      });
+      setSelectedNode(root || null);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setSearchFocused(false);
+      loadedInitialDecisionRef.current = true;
+    } catch (loadError) {
+      console.error("Knowledge graph load error:", loadError);
+      setError(loadError.message || "Unable to load the knowledge graph.");
+      setGraph({ nodes: [], edges: [] });
+      setSelectedNode(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    searchDecisions("");
   }, []);
+
   useEffect(() => {
-    setSearch(globalSearch);
+    setSearch(globalSearch || "");
   }, [globalSearch]);
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return decisions.filter((decision) => {
-      const matchesQuery =
-        !query ||
-        [
-          decision.title,
-          decision.problemStatement,
-          decision.team?.name,
-          decision.createdBy?.name,
-          ...(decision.documents || []).map((doc) => doc.filename),
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query);
-      const matchesStatus =
-        statusFilter === "all" || decision.status === statusFilter;
-      return matchesQuery && matchesStatus;
-    });
-  }, [decisions, search, statusFilter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (search.trim()) {
+        searchDecisions(search);
+      }
+    }, 250);
 
-  const totalDocuments = decisions.reduce(
-    (sum, decision) => sum + (decision.documents?.length || 0),
-    0,
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const selectedDecision = graph.nodes.find(
+    (node) =>
+      node.type === "decision" &&
+      Number(node.entityId) === Number(selectedDecisionId),
   );
-  const approved = decisions.filter(
-    (decision) => decision.status === "Approved",
-  ).length;
+
+  const graphNodes = useMemo(() => {
+    const allowed = new Set([
+      "decision",
+      "person",
+      "team",
+      "document",
+      "alternative",
+      "discussion",
+    ]);
+
+    return graph.nodes.filter((node) => allowed.has(node.type));
+  }, [graph.nodes]);
+
+  const visibleNodeIds = useMemo(
+    () => new Set(graphNodes.map((node) => node.id)),
+    [graphNodes],
+  );
+
+  const visibleEdges = useMemo(
+    () =>
+      graph.edges.filter(
+        (edge) =>
+          visibleNodeIds.has(edge.source) &&
+          visibleNodeIds.has(edge.target),
+      ),
+    [graph.edges, visibleNodeIds],
+  );
+
+  const connectedNodeIds = useMemo(() => {
+    if (!selectedNode) return new Set();
+
+    const ids = new Set([selectedNode.id]);
+
+    visibleEdges.forEach((edge) => {
+      if (edge.source === selectedNode.id) ids.add(edge.target);
+      if (edge.target === selectedNode.id) ids.add(edge.source);
+    });
+
+    return ids;
+  }, [selectedNode, visibleEdges]);
+
+  const nodePositions = useMemo(() => {
+    if (!selectedDecision) return {};
+
+    const byType = {
+      person: graphNodes.filter((node) => node.type === "person").slice(0, 1),
+      team: graphNodes.filter((node) => node.type === "team").slice(0, 1),
+      document: graphNodes.filter((node) => node.type === "document").slice(0, 1),
+      alternative: graphNodes
+        .filter((node) => node.type === "alternative")
+        .slice(0, 1),
+      discussion: graphNodes
+        .filter((node) => node.type === "discussion")
+        .slice(0, 1),
+    };
+
+    const slots = [
+      ["person", 20, 25],
+      ["team", 20, 75],
+      ["document", 80, 25],
+      ["discussion", 80, 75],
+      ["alternative", 50, 84],
+    ];
+
+    const positions = {
+      [selectedDecision.id]: {
+        ...selectedDecision,
+        x: 50,
+        y: 50,
+      },
+    };
+
+    slots.forEach(([type, x, y]) => {
+      const node = byType[type]?.[0];
+      if (!node) return;
+
+      positions[node.id] = {
+        ...node,
+        x,
+        y,
+      };
+    });
+
+    return positions;
+  }, [graphNodes, selectedDecision]);
+
+  const visibleNodeList = Object.values(nodePositions);
+
+  const filterOptions = [
+    ["all", "All"],
+    ["documents", "Documents"],
+    ["people", "Created by"],
+    ["teams", "Team"],
+    ["alternatives", "Alternative"],
+    ["discussions", "Discussion"],
+  ];
+
+  const filterTypeMap = {
+    documents: "document",
+    people: "person",
+    teams: "team",
+    alternatives: "alternative",
+    discussions: "discussion",
+  };
+
+  const filteredNodeIds = useMemo(() => {
+    if (filter === "all") return visibleNodeIds;
+
+    const ids = new Set();
+    visibleNodeList.forEach((node) => {
+      if (node.type === "decision" || node.type === filterTypeMap[filter]) {
+        ids.add(node.id);
+      }
+    });
+    return ids;
+  }, [filter, visibleNodeIds, visibleNodeList]);
+
+  const renderedEdges = visibleEdges.filter(
+    (edge) =>
+      filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target),
+  );
+
+  const searchMatches = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return decisionOptions.slice(0, 8).map((option) => ({
+        type: "decision",
+        id: option.id,
+        title: option.title,
+        subtitle: `${statusLabel(option.status)} · ${option.team?.name || "Unassigned"}`,
+        decisionId: option.id,
+      }));
+    }
+
+    const results = [];
+    decisionOptions.forEach((option) => {
+      const text = [
+        option.title,
+        option.status,
+        option.team?.name,
+        option.createdBy?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (text.includes(query)) {
+        results.push({
+          type: "decision",
+          id: option.id,
+          title: option.title,
+          subtitle: `${statusLabel(option.status)} · ${option.team?.name || "Unassigned"}`,
+          decisionId: option.id,
+        });
+      }
+    });
+
+    return results.slice(0, 10);
+  }, [decisionOptions, search]);
+
+  const handleSearchResult = (result) => {
+    loadGraph(result.decisionId);
+  };
+
+  const handleNodeClick = (node) => {
+    setSelectedNode(node);
+  };
+
+  const handleOpenNode = (node) => {
+    if (!node) return;
+
+    if (node.type === "document") {
+      const filePath = node.metadata?.filePath;
+      if (!filePath) return;
+
+      window.open(
+        `${API_BASE_URL}/${String(filePath).replaceAll("\\", "/")}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      return;
+    }
+
+    if (node.type === "team") {
+      if (typeof openTeam === "function") {
+        openTeam(Number(node.entityId));
+      }
+      return;
+    }
+
+    const decisionId = Number(
+      node.metadata?.decisionId || selectedDecision?.entityId,
+    );
+
+    if (!decisionId || typeof openDecision !== "function") return;
+
+    const decision =
+      decisionOptions.find((item) => Number(item.id) === decisionId) || {
+        id: decisionId,
+        title: selectedDecision?.label || "Decision",
+        status: selectedDecision?.subtitle || "Draft",
+      };
+
+    const tab =
+      node.type === "alternative"
+        ? "alternatives"
+        : node.type === "discussion"
+          ? "discussion"
+          : "overview";
+
+    openDecision(decision, tab);
+  };
+
+  const handleCanvasPointerDown = (event) => {
+    if (event.target.closest("button, a, input")) return;
+
+    setIsPanning(true);
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleCanvasPointerMove = (event) => {
+    if (!isPanning) return;
+
+    setPan({
+      x: dragRef.current.panX + event.clientX - dragRef.current.x,
+      y: dragRef.current.panY + event.clientY - dragRef.current.y,
+    });
+  };
+
+  const stopPanning = (event) => {
+    if (!isPanning) return;
+    setIsPanning(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  const openActionLabel = {
+    decision: "Open Decision",
+    person: "Open Decision",
+    team: "Open Team",
+    document: "Open Document",
+    alternative: "Open Alternatives",
+    discussion: "Open Discussion",
+  }[selectedNode?.type];
+
+  const selectedDescription = selectedNode?.metadata?.problemStatement;
 
   return (
-    <section className="workspace-page full-module-page knowledge-redesign-page">
-      <div className="workspace-page-header knowledge-header">
+    <section className="workspace-page full-module-page knowledge-graph-page-v5">
+      <div className="workspace-page-header">
         <div>
           <span className="section-label">KNOWLEDGE</span>
-          <h1>Knowledge Repository</h1>
-          <p>
-            Decision-centered knowledge: every decision keeps its supporting
-            evidence, context and history together.
-          </p>
-        </div>
-        <button className="compact-action" type="button" onClick={load}>
-          Refresh
-        </button>
-      </div>
-
-      <div className="knowledge-overview-strip">
-        <div>
-          <span>Decisions</span>
-          <strong>{decisions.length}</strong>
-        </div>
-        <div>
-          <span>Documents</span>
-          <strong>{totalDocuments}</strong>
-        </div>
-        <div>
-          <span>Approved</span>
-          <strong>{approved}</strong>
-        </div>
-        <div>
-          <span>Evidence coverage</span>
-          <strong>
-            {decisions.length
-              ? Math.round(
-                  (decisions.filter(
-                    (decision) => (decision.documents || []).length > 0,
-                  ).length /
-                    decisions.length) *
-                    100,
-                )
-              : 0}
-            %
-          </strong>
+          <h1>Knowledge Graph</h1>
+          <p>Explore how one decision connects to the knowledge around it.</p>
         </div>
       </div>
 
-      <div className="knowledge-controls">
-        <div className="dashboard-search inline-search">
-          <Search size={16} />
+      <div className="knowledge-graph-search-card knowledge-graph-search-card-v4">
+        <div className="knowledge-graph-search-main">
+          <Search size={17} />
           <input
             value={search}
+            onFocus={() => setSearchFocused(true)}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search decisions, documents, teams or people..."
+            placeholder="Search decisions..."
+            aria-label="Search decisions"
           />
+          {searching && (
+            <span className="knowledge-graph-search-status">Searching…</span>
+          )}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-        >
-          <option value="all">All statuses</option>
-          <option value="Draft">Draft</option>
-          <option value="UnderReview">Under review</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
-          <option value="Archived">Archived</option>
-        </select>
-        <span>
-          {filtered.length} decision{filtered.length === 1 ? "" : "s"}
-        </span>
-      </div>
 
-      <div className="knowledge-decision-grid">
-        {loading ? (
-          <EmptyState
-            icon={Clock3}
-            title="Loading knowledge"
-            body="Fetching decisions and their supporting documents."
-          />
-        ) : error ? (
-          <div className="module-error-state">
-            <X size={18} />
-            <strong>Knowledge unavailable</strong>
-            <span>{error}</span>
-            <button type="button" onClick={load}>
-              Try again
-            </button>
-          </div>
-        ) : filtered.length ? (
-          filtered.map((decision) => {
-            const isOpen = expanded === decision.id;
-            const docs = decision.documents || [];
-            return (
-              <article
-                className={`knowledge-decision-card ${isOpen ? "expanded" : ""}`}
-                key={decision.id}
+        {searchFocused && (
+          <div className="knowledge-graph-search-results knowledge-graph-search-results-v4">
+            {searchMatches.map((result) => (
+              <button
+                type="button"
+                key={`${result.type}:${result.id}`}
+                onClick={() => handleSearchResult(result)}
               >
-                <button
-                  className="knowledge-decision-card-head"
-                  type="button"
-                  onClick={() =>
-                    setExpanded((current) =>
-                      current === decision.id ? null : decision.id,
-                    )
-                  }
-                >
-                  <div className="knowledge-decision-icon">
-                    <CheckCircle2 size={18} />
-                  </div>
-                  <div className="knowledge-decision-head-copy">
-                    <div className="knowledge-card-kicker">
-                      DECISION KNOWLEDGE
-                    </div>
-                    <strong>{decision.title}</strong>
-                    <span>
-                      {decision.problemStatement ||
-                        "No problem statement added."}
-                    </span>
-                    <small>
-                      {decision.team?.name || "Unassigned"} ·{" "}
-                      {decision.createdBy?.name || "Workspace member"} · Updated{" "}
-                      {formatDate(decision.updatedAt)}
-                    </small>
-                  </div>
-                  <div className="knowledge-decision-head-meta">
-                    <span
-                      className={`status status-${statusClass(decision.status)}`}
-                    >
-                      <span />
-                      {statusLabel(decision.status)}
-                    </span>
-                    <span className="knowledge-document-count">
-                      {docs.length} document{docs.length === 1 ? "" : "s"}
-                    </span>
-                    <ChevronRight
-                      className={
-                        isOpen ? "knowledge-chevron open" : "knowledge-chevron"
-                      }
-                      size={18}
-                    />
-                  </div>
-                </button>
-
-                {isOpen && (
-                  <div className="knowledge-decision-expanded">
-                    <div className="knowledge-expanded-toolbar">
-                      <div>
-                        <strong>Supporting documents</strong>
-                        <span>
-                          {docs.length
-                            ? "Evidence attached to this decision"
-                            : "No documents attached yet"}
-                        </span>
-                      </div>
-                      {openDecision && (
-                        <button
-                          type="button"
-                          className="knowledge-open-decision"
-                          onClick={() => openDecision(decision)}
-                        >
-                          Open full decision <ArrowUpRight size={13} />
-                        </button>
-                      )}
-                    </div>
-                    {docs.length ? (
-                      <div className="knowledge-document-stack">
-                        {docs.map((doc) => (
-                          <div className="knowledge-document-item" key={doc.id}>
-                            <div className="knowledge-file-icon">
-                              {String(doc.filename)
-                                .toLowerCase()
-                                .endsWith(".pdf")
-                                ? "PDF"
-                                : "FILE"}
-                            </div>
-                            <div className="knowledge-document-item-copy">
-                              <strong>{doc.filename}</strong>
-                              <span>
-                                {doc.category || "General"} · Uploaded by{" "}
-                                {doc.uploadedBy?.name || "Workspace member"} ·{" "}
-                                {formatDate(doc.createdAt)}
-                              </span>
-                              {doc.tags ? (
-                                <div className="tag-list">
-                                  {doc.tags
-                                    .split(",")
-                                    .map((tag) => tag.trim())
-                                    .filter(Boolean)
-                                    .slice(0, 4)
-                                    .map((tag) => (
-                                      <span key={tag}>{tag}</span>
-                                    ))}
-                                </div>
-                              ) : null}
-                            </div>
-                            <a
-                              className="knowledge-view-button"
-                              href={`${API_BASE_URL}/${String(doc.filePath || "").replaceAll("\\", "/")}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Open <ArrowUpRight size={13} />
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <EmptyState
-                        icon={FolderOpen}
-                        title="No supporting documents"
-                        body="Upload evidence from the decision workspace to build this knowledge record."
-                      />
-                    )}
-                  </div>
-                )}
-              </article>
-            );
-          })
-        ) : (
-          <EmptyState
-            icon={Search}
-            title="No matching decisions"
-            body="Try a different search or status filter."
-          />
+                <span className="knowledge-graph-result-icon">
+                  <GitBranch size={14} />
+                </span>
+                <span>
+                  <strong>{result.title}</strong>
+                  <small>{result.subtitle}</small>
+                </span>
+                <ChevronRight size={14} />
+              </button>
+            ))}
+          </div>
         )}
       </div>
+
+      {!selectedDecisionId ? (
+        <div className="knowledge-graph-empty-card">
+          <div className="module-empty-icon">
+            <Network size={20} />
+          </div>
+          <strong>{error ? "Knowledge Graph unavailable" : "Choose a decision"}</strong>
+          <span>
+            {error ||
+              "Search above to open a decision and explore its connected knowledge."}
+          </span>
+          {error && (
+            <button
+              type="button"
+              className="knowledge-graph-empty-action"
+              onClick={() => searchDecisions("")}
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="knowledge-graph-card-v3 knowledge-graph-card-v5">
+          <div className="knowledge-graph-toolbar-v3 knowledge-graph-toolbar-v5">
+            <div>
+              <span className="section-label">IMPORTANT DECISION</span>
+              <strong>{selectedDecision?.label || "Decision"}</strong>
+              <small>{visibleNodeList.length - 1} direct relationships</small>
+            </div>
+
+            <div className="knowledge-graph-toolbar-actions">
+              <button
+                type="button"
+                onClick={() =>
+                  setZoom((value) =>
+                    Math.max(0.8, Number((value - 0.1).toFixed(2))),
+                  )
+                }
+                aria-label="Zoom out"
+              >
+                <Minus size={14} />
+              </button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setZoom((value) =>
+                    Math.min(1.3, Number((value + 0.1).toFixed(2))),
+                  )
+                }
+                aria-label="Zoom in"
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }}
+                aria-label="Reset view"
+              >
+                <Maximize2 size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="knowledge-graph-filter-bar-v5">
+            <span>SHOW</span>
+            {filterOptions.map(([value, label]) => {
+              const count =
+                value === "all"
+                  ? visibleNodeList.length - 1
+                  : visibleNodeList.filter(
+                      (node) => node.type === filterTypeMap[value],
+                    ).length;
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  className={filter === value ? "active" : ""}
+                  onClick={() => setFilter(value)}
+                >
+                  <i className={`filter-dot filter-${value}`} />
+                  {label}
+                  {count > 0 && <b>{count}</b>}
+                </button>
+              );
+            })}
+          </div>
+
+          {loading ? (
+            <div className="knowledge-graph-inline-loading knowledge-graph-loading-v5">
+              <div className="knowledge-graph-loading-orbit" />
+              <strong>Building knowledge graph…</strong>
+              <span>Connecting the selected decision to its direct knowledge.</span>
+            </div>
+          ) : error ? (
+            <div className="knowledge-graph-inline-error">
+              <X size={18} />
+              <strong>Knowledge Graph unavailable</strong>
+              <span>{error}</span>
+              <button type="button" onClick={() => loadGraph(selectedDecisionId)}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="knowledge-graph-main-v4 knowledge-graph-main-v5">
+              <div
+                className={`knowledge-graph-canvas-v4 knowledge-graph-canvas-v5 ${
+                  isPanning ? "is-panning" : ""
+                }`}
+                onPointerDown={handleCanvasPointerDown}
+                onPointerMove={handleCanvasPointerMove}
+                onPointerUp={stopPanning}
+                onPointerCancel={stopPanning}
+              >
+                <div
+                  className="knowledge-graph-stage-v4 knowledge-graph-stage-v5"
+                  style={{
+                    transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                  }}
+                >
+                  <svg
+                    className="knowledge-graph-edges-v4 knowledge-graph-edges-v5"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    {renderedEdges.map((edge) => {
+                      const source = nodePositions[edge.source];
+                      const target = nodePositions[edge.target];
+                      if (!source || !target) return null;
+
+                      const connected =
+                        connectedNodeIds.has(edge.source) &&
+                        connectedNodeIds.has(edge.target);
+
+                      const dx = target.x - source.x;
+                      const dy = target.y - source.y;
+                      const length = Math.max(1, Math.hypot(dx, dy));
+                      const normalX = -dy / length;
+                      const normalY = dx / length;
+                      const bend = Math.min(5, Math.max(2.2, length * 0.08));
+                      const mx = (source.x + target.x) / 2;
+                      const my = (source.y + target.y) / 2;
+                      const cx = mx + normalX * bend;
+                      const cy = my + normalY * bend;
+
+                      return (
+                        <path
+                          key={edge.id}
+                          d={`M ${source.x} ${source.y} Q ${cx} ${cy} ${target.x} ${target.y}`}
+                          className={`knowledge-graph-edge-v5 ${
+                            connected ? "active" : ""
+                          }`}
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {visibleNodeList.map((node) => {
+                    const visible = filteredNodeIds.has(node.id);
+                    const connected = connectedNodeIds.has(node.id);
+                    const muted = selectedNode && !connected;
+
+                    return (
+                      <button
+                        type="button"
+                        key={node.id}
+                        className={`knowledge-graph-node-v5 node-${node.type} ${
+                          selectedNode?.id === node.id ? "selected" : ""
+                        } ${connected ? "connected" : ""} ${muted ? "muted" : ""}`}
+                        style={{
+                          left: `${node.x}%`,
+                          top: `${node.y}%`,
+                          display: visible ? "flex" : "none",
+                        }}
+                        onClick={() => handleNodeClick(node)}
+                      >
+                        <span className="knowledge-graph-node-icon-v5">
+                          {node.type === "document" ? (
+                            <FileText size={14} />
+                          ) : node.type === "team" || node.type === "person" ? (
+                            <Users size={14} />
+                          ) : node.type === "alternative" ? (
+                            <GitBranch size={14} />
+                          ) : node.type === "discussion" ? (
+                            <MessageCircle size={14} />
+                          ) : (
+                            <GitBranch size={15} />
+                          )}
+                        </span>
+                        <span className="knowledge-graph-node-copy-v5">
+                          <strong title={node.label}>{node.label}</strong>
+                          <small>{node.subtitle}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="knowledge-graph-canvas-hint-v5">
+                  Drag to pan · Click a node to inspect
+                </div>
+              </div>
+
+              <aside className="knowledge-graph-inspector-v5">
+                {selectedNode ? (
+                  <div className="knowledge-graph-inspector-content-v5">
+                    <div className="knowledge-graph-inspector-type-v5">
+                      {selectedNode.type === "person"
+                        ? "CREATED BY"
+                        : selectedNode.type.toUpperCase()}
+                    </div>
+
+                    <h2>{selectedNode.label}</h2>
+                    <p className="knowledge-graph-inspector-subtitle-v5">
+                      {selectedNode.subtitle}
+                    </p>
+
+                    {selectedDescription && (
+                      <div className="knowledge-graph-inspector-description-v5">
+                        {selectedDescription}
+                      </div>
+                    )}
+
+                    {selectedNode.type === "decision" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>Status</span>
+                          <strong>{statusLabel(selectedNode.metadata?.status)}</strong>
+                        </div>
+                        <div>
+                          <span>Team</span>
+                          <strong>{selectedNode.metadata?.teamName || "Unassigned"}</strong>
+                        </div>
+                        <div>
+                          <span>Documents</span>
+                          <strong>{selectedNode.metadata?.documents || 0}</strong>
+                        </div>
+                        <div>
+                          <span>Alternatives</span>
+                          <strong>{selectedNode.metadata?.alternatives || 0}</strong>
+                        </div>
+                        <div>
+                          <span>Discussions</span>
+                          <strong>{selectedNode.metadata?.discussions || 0}</strong>
+                        </div>
+                        <div>
+                          <span>Created by</span>
+                          <strong>{selectedNode.metadata?.createdBy || "Unknown"}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type === "person" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>Name</span>
+                          <strong>{selectedNode.metadata?.name || selectedNode.label}</strong>
+                        </div>
+                        <div>
+                          <span>Role</span>
+                          <strong>{selectedNode.metadata?.role || selectedNode.subtitle}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type === "team" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>Members</span>
+                          <strong>{selectedNode.metadata?.memberCount || 0}</strong>
+                        </div>
+                        <div>
+                          <span>Decisions</span>
+                          <strong>{selectedNode.metadata?.decisionCount || 0}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type === "document" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>File type</span>
+                          <strong>{selectedNode.metadata?.fileType || "FILE"}</strong>
+                        </div>
+                        <div>
+                          <span>Category</span>
+                          <strong>{selectedNode.metadata?.category || "General"}</strong>
+                        </div>
+                        <div>
+                          <span>Uploaded by</span>
+                          <strong>{selectedNode.metadata?.uploadedBy || "Workspace member"}</strong>
+                        </div>
+                        <div>
+                          <span>Uploaded</span>
+                          <strong>{formatDate(selectedNode.metadata?.createdAt)}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type === "alternative" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>Risk</span>
+                          <strong>{selectedNode.metadata?.risk || "—"}</strong>
+                        </div>
+                        <div>
+                          <span>Feasibility</span>
+                          <strong>{selectedNode.metadata?.feasibility || "—"}</strong>
+                        </div>
+                        <div>
+                          <span>Cost</span>
+                          <strong>{selectedNode.metadata?.cost || "—"}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedNode.type === "discussion" && (
+                      <div className="knowledge-graph-inspector-grid-v5">
+                        <div>
+                          <span>Type</span>
+                          <strong>{selectedNode.metadata?.type || "Comment"}</strong>
+                        </div>
+                        <div>
+                          <span>Created by</span>
+                          <strong>{selectedNode.metadata?.createdBy || "Workspace member"}</strong>
+                        </div>
+                        <div>
+                          <span>Created</span>
+                          <strong>{formatDate(selectedNode.metadata?.createdAt)}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="knowledge-graph-open-action-v5"
+                      onClick={() => handleOpenNode(selectedNode)}
+                    >
+                      {openActionLabel || "Open"}
+                      <ArrowUpRight size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="knowledge-graph-inspector-empty-v5">
+                    <Network size={20} />
+                    <strong>Select a node</strong>
+                    <span>
+                      Select the decision, creator, team, document, alternative,
+                      or discussion to inspect it here.
+                    </span>
+                  </div>
+                )}
+              </aside>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

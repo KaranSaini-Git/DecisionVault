@@ -108,6 +108,7 @@ function Dashboard() {
   const [decisionTab, setDecisionTab] = useState("overview");
   const [selectedAlternative, setSelectedAlternative] = useState(null);
   const [availableTeams, setAvailableTeams] = useState([]);
+  const [teamToOpenId, setTeamToOpenId] = useState(null);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -584,6 +585,11 @@ function Dashboard() {
     setMoreMenu(null);
   };
 
+  const openTeamFromKnowledge = (teamId) => {
+    setTeamToOpenId(Number(teamId));
+    handlePageChange("Teams");
+  };
+
   const openCreateDecision = () => {
     setDecisionForm(EMPTY_DECISION_FORM);
 
@@ -610,7 +616,7 @@ function Dashboard() {
     setMoreMenu(null);
   };
 
-  const openDecision = async (decision) => {
+  const openDecision = async (decision, preferredTab = "overview") => {
     try {
       const data = await apiRequest(`/api/decisions/${decision.id}`);
 
@@ -647,7 +653,7 @@ function Dashboard() {
       setDiscussionForm({ type: "Comment", content: "", parentId: "" });
       setEditingDiscussion(null);
       setSelectedDiscussionFile(null);
-      setDecisionTab("overview");
+      setDecisionTab(preferredTab);
 
       setModal({
         type: "view-decision",
@@ -1936,12 +1942,17 @@ function Dashboard() {
               <KnowledgePage
                 apiRequest={apiRequest}
                 openDecision={openDecision}
+                openTeam={openTeamFromKnowledge}
                 globalSearch={searchQuery}
               />
             )}
 
           {!showOverview && !showDecisionsPage && activePage === "Teams" && (
-            <TeamsPage apiRequest={apiRequest} currentUser={currentUser} />
+            <TeamsPage
+              apiRequest={apiRequest}
+              currentUser={currentUser}
+              initialTeamId={teamToOpenId}
+            />
           )}
 
           {!showOverview &&
