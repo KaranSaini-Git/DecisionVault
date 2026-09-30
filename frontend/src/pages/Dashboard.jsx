@@ -890,6 +890,8 @@ function Dashboard() {
 
       const formData = new FormData();
       formData.append("file", selectedFile);
+      formData.append("category", documentCategory);
+      formData.append("tags", documentTags.trim());
 
       const responseData = await apiRequest(
         `/api/decisions/${selectedDecision.id}/documents`,
@@ -907,6 +909,8 @@ function Dashboard() {
       });
 
       setSelectedFile(null);
+      setDocumentCategory("General");
+      setDocumentTags("");
     } catch (documentError) {
       console.error("Upload document error:", documentError);
       alert(documentError.message || "Unable to upload document.");
@@ -915,39 +919,39 @@ function Dashboard() {
     }
   };
 
-  const getDocumentUrl = (document) => {
-    const rawPath = document?.url || document?.filePath || document?.path || "";
-
-    if (!rawPath) {
-      return "";
-    }
-
-    if (/^https?:\/\//i.test(rawPath)) {
-      return rawPath;
-    }
-
-    const normalizedPath = rawPath.replace(/\\/g, "/").replace(/^\.\//, "");
-
-    if (normalizedPath.startsWith("/")) {
-      return `${API_BASE_URL}${normalizedPath}`;
-    }
-
-    if (normalizedPath.startsWith("uploads/")) {
-      return `${API_BASE_URL}/${normalizedPath}`;
-    }
-
-    return `${API_BASE_URL}/uploads/${normalizedPath.split("/").pop()}`;
-  };
-
-  const handleOpenDocument = (document) => {
-    const url = getDocumentUrl(document);
-
-    if (!url) {
-      alert("This document does not have a stored file path.");
+  const handleOpenDocument = async (document) => {
+    if (!document?.id || !selectedDecision?.id) {
+      alert("This document cannot be opened.");
       return;
     }
 
-    window.open(url, "_blank", "noopener,noreferrer");
+    const newWindow = window.open(
+      "about:blank",
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    try {
+      const responseData = await apiRequest(
+        `/api/decisions/${selectedDecision.id}/documents/${document.id}/url`,
+      );
+
+      if (!responseData?.url) {
+        throw new Error("Document URL was not returned.");
+      }
+
+      if (newWindow) {
+        newWindow.location.href = responseData.url;
+      } else {
+        window.open(responseData.url, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      newWindow?.close();
+
+      console.error("Open document error:", error);
+
+      alert(error.message || "Unable to open the document.");
+    }
   };
 
   const handleSaveDiscussion = async (event) => {

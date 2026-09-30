@@ -11454,3 +11454,121 @@ select:focus-visible {
   position: relative;
   z-index: 1101;
 }
+
+/* DecisionVault Knowledge Graph — final interaction/layout fixes */
+
+.knowledge-graph-page-v6 {
+  position: relative;
+  overflow: visible;
+}
+
+.knowledge-graph-search-card-v6 {
+  position: relative;
+  z-index: 100;
+  overflow: visible;
+}
+
+.knowledge-graph-search-results-v6 {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #e2e9e4;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 18px 38px rgba(26, 43, 34, 0.12);
+}
+
+.knowledge-graph-search-results-v6 > button {
+  width: 100%;
+  min-height: 52px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #1b251e;
+  text-align: left;
+}
+
+.knowledge-graph-search-results-v6 > button:hover {
+  background: #f5f8f5;
+}
+
+.knowledge-graph-search-results-v6 > button > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.knowledge-graph-search-results-v6 strong {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-graph-search-results-v6 small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8a958e;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-graph-result-icon-v6 {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #eef7f1;
+  color: #176b3a;
+}
+
+.knowledge-graph-search-empty-v6 {
+  padding: 16px 12px;
+  color: #87938b;
+  font-size: 10px;
+  text-align: center;
+}
+
+.knowledge-graph-search-status-v6 {
+  margin-left: auto;
+  color: #87938b;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* No inspector = the graph gets the entire content width. */
+.knowledge-graph-layout-v6.inspector-closed-v6 {
+  display: block;
+  width: 100%;
+  grid-template-columns: none !important;
+}
+
+.knowledge-graph-layout-v6.inspector-closed-v6
+  .knowledge-graph-canvas-v6 {
+  width: 100%;
+}
+
+/* Inspector exists only when React renders selectedNode. */
+.knowledge-graph-inspector-v6 {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .knowledge-graph-layout-v6.inspector-closed-v6 {
+    display: block;
+  }
+}

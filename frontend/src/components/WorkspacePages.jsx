@@ -752,6 +752,7 @@ function KnowledgePage({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [filter, setFilter] = useState("all");
+  const searchRequestRef = useRef(0);
   const dragRef = useRef({
     x: 0,
     y: 0,
@@ -760,30 +761,70 @@ function KnowledgePage({
   });
 
   const searchDecisions = async (value) => {
+    const requestId = ++searchRequestRef.current;
+
     try {
       setSearching(true);
       setError("");
 
-      const query = value.trim();
+      const query = String(value || "").trim();
       const endpoint = query
         ? `/api/knowledge/graph?search=${encodeURIComponent(query)}`
         : "/api/knowledge/graph";
 
       const data = await apiRequest(endpoint);
+
+      if (requestId !== searchRequestRef.current) return;
+
+      const options = Array.isArray(data?.decisionOptions)
+        ? data.decisionOptions
+        : [];
+
+      setDecisionOptions(options);
+    } catch (searchError) {
+      if (requestId !== searchRequestRef.current) return;
+
+      console.error("Knowledge graph search error:", searchError);
+      setError(searchError.message || "Unable to search decisions.");
+      setDecisionOptions([]);
+    } finally {
+      if (requestId === searchRequestRef.current) {
+        setSearching(false);
+      }
+    }
+  };
+
+  const initializeKnowledgeGraph = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await apiRequest("/api/knowledge/graph");
       const options = Array.isArray(data?.decisionOptions)
         ? data.decisionOptions
         : [];
 
       setDecisionOptions(options);
 
-      if (!selectedDecisionId && data?.recommendedDecisionId) {
-        await loadGraph(data.recommendedDecisionId);
+      // The graph should open with a real decision, but searching should
+      // never silently change which decision is displayed.
+      const initialDecisionId = data?.recommendedDecisionId || options[0]?.id;
+
+      if (initialDecisionId) {
+        await loadGraph(initialDecisionId);
       }
-    } catch (searchError) {
-      console.error("Knowledge graph search error:", searchError);
-      setError(searchError.message || "Unable to load the knowledge graph.");
+    } catch (initializationError) {
+      console.error(
+        "Knowledge graph initialization error:",
+        initializationError,
+      );
+      setError(
+        initializationError.message || "Unable to load the knowledge graph.",
+      );
+      setGraph({ nodes: [], edges: [] });
+      setSelectedNode(null);
     } finally {
-      setSearching(false);
+      setLoading(false);
     }
   };
 
@@ -801,10 +842,6 @@ function KnowledgePage({
       const data = await apiRequest(`/api/knowledge/graph?decisionId=${id}`);
 
       const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
-
-      const root = nodes.find(
-        (node) => node.type === "decision" && Number(node.entityId) === id,
-      );
 
       setSelectedDecisionId(id);
       setGraph({
@@ -831,7 +868,7 @@ function KnowledgePage({
   };
 
   useEffect(() => {
-    searchDecisions("");
+    initializeKnowledgeGraph();
   }, []);
 
   useEffect(() => {
@@ -840,9 +877,7 @@ function KnowledgePage({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      if (search.trim()) {
-        searchDecisions(search);
-      }
+      searchDecisions(search);
     }, 250);
 
     return () => window.clearTimeout(timer);
@@ -1195,7 +1230,7 @@ function KnowledgePage({
     }
   };
 
-  const handleOpenNode = (node) => {
+  const handleOpenNode = async (node) => {
     if (!node) return;
 
     if (node.metadata?.group) {
@@ -1227,15 +1262,41 @@ function KnowledgePage({
     }
 
     if (node.type === "document") {
-      const filePath = node.metadata?.filePath;
+      const documentId = Number(node.entityId);
+      const decisionId = Number(node.metadata?.decisionId);
 
-      if (!filePath) return;
+      if (!documentId || !decisionId) {
+        return;
+      }
 
-      window.open(
-        `${API_BASE_URL}/${String(filePath).replaceAll("\\", "/")}`,
+      const newWindow = window.open(
+        "about:blank",
         "_blank",
         "noopener,noreferrer",
       );
+
+      try {
+        const responseData = await apiRequest(
+          `/api/decisions/${decisionId}/documents/${documentId}/url`,
+        );
+
+        if (!responseData?.url) {
+          throw new Error("Document URL was not returned.");
+        }
+
+        if (newWindow) {
+          newWindow.location.href = responseData.url;
+        } else {
+          window.open(responseData.url, "_blank", "noopener,noreferrer");
+        }
+      } catch (error) {
+        newWindow?.close();
+
+        console.error("Open graph document error:", error);
+
+        alert(error.message || "Unable to open the document.");
+      }
+
       return;
     }
 
@@ -1370,32 +1431,58 @@ function KnowledgePage({
           value={search}
           onFocus={() => setSearchFocused(true)}
           onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+
+            event.preventDefault();
+            const firstMatch = searchMatches[0];
+
+            if (firstMatch) {
+              setSearchFocused(false);
+              loadGraph(firstMatch.decisionId);
+            }
+          }}
+          onBlur={() => {
+            window.setTimeout(() => setSearchFocused(false), 150);
+          }}
           placeholder="Search decisions..."
           aria-label="Search decisions"
         />
-        {searching && <span>Searching…</span>}
+
+        {searching && (
+          <span className="knowledge-graph-search-status-v6">Searching…</span>
+        )}
 
         {searchFocused && (
           <div className="knowledge-graph-search-results-v6">
-            {searchMatches.map((result) => (
-              <button
-                type="button"
-                key={`${result.type}:${result.id}`}
-                onClick={() => {
-                  setSearchFocused(false);
-                  loadGraph(result.decisionId);
-                }}
-              >
-                <span className="knowledge-graph-result-icon-v6">
-                  <GitBranch size={14} />
-                </span>
-                <span>
-                  <strong>{result.title}</strong>
-                  <small>{result.subtitle}</small>
-                </span>
-                <ChevronRight size={14} />
-              </button>
-            ))}
+            {searchMatches.length > 0 ? (
+              searchMatches.map((result) => (
+                <button
+                  type="button"
+                  key={`${result.type}:${result.id}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setSearchFocused(false);
+                    loadGraph(result.decisionId);
+                  }}
+                >
+                  <span className="knowledge-graph-result-icon-v6">
+                    <GitBranch size={14} />
+                  </span>
+                  <span>
+                    <strong>{result.title}</strong>
+                    <small>{result.subtitle}</small>
+                  </span>
+                  <ChevronRight size={14} />
+                </button>
+              ))
+            ) : (
+              <div className="knowledge-graph-search-empty-v6">
+                {search.trim()
+                  ? `No decisions match “${search.trim()}”.`
+                  : "No decisions available."}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2221,126 +2308,497 @@ function DiscussionsPage({ apiRequest, globalSearch = "" }) {
 }
 
 function DocumentsPage({ apiRequest, globalSearch = "" }) {
+  const DOCUMENT_CATEGORIES = [
+    "General",
+    "Research",
+    "Evaluation",
+    "Requirements",
+    "Architecture",
+    "Security",
+    "Compliance",
+    "Planning",
+    "Deployment",
+  ];
+
   const [documents, setDocuments] = useState([]);
-  const [search, setSearch] = useState("");
+  const [decisions, setDecisions] = useState([]);
+  const [search, setSearch] = useState(globalSearch || "");
   const [loading, setLoading] = useState(true);
-  const load = async () => {
+  const [loadingDecisions, setLoadingDecisions] = useState(true);
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedDecisionId, setSelectedDecisionId] = useState("");
+  const [documentCategory, setDocumentCategory] = useState("General");
+  const [documentTags, setDocumentTags] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+
+  const loadDocuments = async () => {
     try {
       setLoading(true);
       const data = await apiRequest(
         "/api/knowledge?tab=documents&page=1&pageSize=50",
       );
-      setDocuments(data?.documents || []);
-    } catch {
+      setDocuments(Array.isArray(data?.documents) ? data.documents : []);
+    } catch (requestError) {
+      console.error("Load documents error:", requestError);
       setDocuments([]);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadDecisions = async () => {
+    try {
+      setLoadingDecisions(true);
+      const data = await apiRequest("/api/decisions");
+      const availableDecisions = Array.isArray(data?.decisions)
+        ? data.decisions
+        : [];
+
+      setDecisions(availableDecisions);
+
+      if (!selectedDecisionId && availableDecisions.length) {
+        setSelectedDecisionId(String(availableDecisions[0].id));
+      }
+    } catch (requestError) {
+      console.error("Load decisions error:", requestError);
+      setDecisions([]);
+    } finally {
+      setLoadingDecisions(false);
+    }
+  };
+
   useEffect(() => {
-    load();
+    loadDocuments();
+    loadDecisions();
   }, []);
 
   useEffect(() => {
     setSearch(globalSearch || "");
   }, [globalSearch]);
 
+  const openUpload = () => {
+    setUploadError("");
+    setUploadSuccess("");
+    setUploadOpen(true);
+  };
+
+  const closeUpload = () => {
+    if (uploading) return;
+
+    setUploadOpen(false);
+    setSelectedFile(null);
+    setDocumentCategory("General");
+    setDocumentTags("");
+    setUploadError("");
+    setUploadSuccess("");
+  };
+
+  const handleDocumentUpload = async () => {
+    if (!selectedFile) {
+      setUploadError("Choose a file before uploading.");
+      return;
+    }
+
+    if (!selectedDecisionId) {
+      setUploadError("Select the decision this document belongs to.");
+      return;
+    }
+
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setUploadError("Files must be 25 MB or smaller.");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadError("");
+      setUploadSuccess("");
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("category", documentCategory);
+      formData.append("tags", documentTags.trim());
+
+      await apiRequest(
+        `/api/decisions/${Number(selectedDecisionId)}/documents`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      setUploadSuccess("Document uploaded successfully.");
+
+      setSelectedFile(null);
+      setDocumentTags("");
+
+      await loadDocuments();
+    } catch (requestError) {
+      console.error("Upload document error:", requestError);
+      setUploadError(requestError.message || "Unable to upload the document.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const filtered = documents.filter((item) =>
-    `${item.filename} ${item.decision?.title || ""} ${item.tags || ""} ${item.category || ""}`
+    [
+      item.filename,
+      item.decision?.title,
+      item.tags,
+      item.category,
+      item.uploadedBy?.name,
+    ]
+      .filter(Boolean)
+      .join(" ")
       .toLowerCase()
-      .includes(search.toLowerCase()),
+      .includes(search.trim().toLowerCase()),
   );
+
+  const categoryCount = new Set(
+    documents.map((item) => item.category || "General").filter(Boolean),
+  ).size;
+
+  const decisionCount = new Set(
+    documents.map((item) => item.decisionId).filter(Boolean),
+  ).size;
+
   return (
-    <section className="workspace-page full-module-page">
+    <section className="workspace-page full-module-page documents-page-v2">
       <div className="workspace-page-header">
         <div>
           <span className="section-label">DOCUMENT ARCHIVE</span>
+
           <h1>Documents</h1>
+
           <p>
-            Pure file storage: search, review and open supporting evidence
-            without mixing it with broader knowledge discovery.
+            Store, organize and open the supporting evidence attached to
+            DecisionVault decisions.
           </p>
         </div>
-        <button className="compact-action" type="button" onClick={load}>
-          Refresh
-        </button>
+
+        <div className="documents-page-actions-v2">
+          <button
+            className="compact-action"
+            type="button"
+            onClick={loadDocuments}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+
+          <button
+            className="modal-primary documents-upload-trigger-v2"
+            type="button"
+            onClick={openUpload}
+          >
+            <Plus size={14} />
+            Upload document
+          </button>
+        </div>
       </div>
-      <div className="module-toolbar">
+
+      <div className="module-toolbar documents-toolbar-v2">
         <div className="dashboard-search inline-search">
           <Search size={16} />
+
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search files, decisions or tags..."
+            placeholder="Search files, decisions, tags or people..."
           />
         </div>
-        <span>{filtered.length} files</span>
+
+        <span>
+          {filtered.length} of {documents.length} files
+        </span>
       </div>
+
       <div className="documents-summary-strip">
         <div>
           <strong>{documents.length}</strong>
           <span>Files archived</span>
         </div>
+
         <div>
-          <strong>
-            {new Set(documents.map((item) => item.category)).size}
-          </strong>
+          <strong>{categoryCount}</strong>
           <span>Categories</span>
         </div>
+
         <div>
-          <strong>
-            {new Set(documents.map((item) => item.decisionId)).size}
-          </strong>
+          <strong>{decisionCount}</strong>
           <span>Decisions linked</span>
         </div>
       </div>
-      <div className="global-document-list">
+
+      <div className="global-document-list documents-list-v2">
         {loading ? (
           <EmptyState
             icon={Clock3}
             title="Loading documents"
-            body="Fetching the file archive."
+            body="Fetching the document archive."
           />
         ) : filtered.length ? (
           filtered.map((document) => (
-            <div className="global-document-row" key={document.id}>
-              <div className="knowledge-file-icon">FILE</div>
-              <div>
-                <strong>{document.filename}</strong>
+            <article
+              className="global-document-row document-row-v2"
+              key={document.id}
+            >
+              <div className="knowledge-file-icon document-file-icon-v2">
+                <FileText size={16} />
+              </div>
+
+              <div className="document-row-main-v2">
+                <strong title={document.filename}>{document.filename}</strong>
+
                 <span>
-                  {document.decision?.title || "Decision"} ·{" "}
-                  {document.uploadedBy?.name || "Workspace member"} ·{" "}
+                  {document.decision?.title || "Unlinked decision"}
+                  {" · "}
+                  {document.uploadedBy?.name || "Workspace member"}
+                  {" · "}
                   {formatDate(document.createdAt)}
                 </span>
               </div>
-              <div className="tag-list">
+
+              <div className="document-row-meta-v2">
                 <span>{document.category || "General"}</span>
-                {document.tags
-                  ?.split(",")
+
+                {(document.tags || "")
+                  .split(",")
                   .map((tag) => tag.trim())
                   .filter(Boolean)
-                  .slice(0, 2)
+                  .slice(0, 3)
                   .map((tag) => (
                     <span key={tag}>{tag}</span>
                   ))}
               </div>
+
               <a
-                href={`${API_BASE_URL}/${String(document.filePath || "").replaceAll("\\", "/")}`}
-                target="_blank"
-                rel="noreferrer"
+                href="#"
+                className="document-open-link-v2"
+                onClick={async (event) => {
+                  event.preventDefault();
+
+                  const decisionId = Number(document.decisionId);
+                  const documentId = Number(document.id);
+
+                  if (!decisionId || !documentId) {
+                    alert("This document cannot be opened.");
+                    return;
+                  }
+
+                  const newWindow = window.open(
+                    "about:blank",
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+
+                  try {
+                    const responseData = await apiRequest(
+                      `/api/decisions/${decisionId}/documents/${documentId}/url`,
+                    );
+
+                    if (!responseData?.url) {
+                      throw new Error("Document URL was not returned.");
+                    }
+
+                    if (newWindow) {
+                      newWindow.location.href = responseData.url;
+                    } else {
+                      window.open(
+                        responseData.url,
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }
+                  } catch (error) {
+                    newWindow?.close();
+                    console.error("Open document error:", error);
+                    alert(error.message || "Unable to open the document.");
+                  }
+                }}
               >
-                Open <ArrowUpRight size={13} />
+                Open
+                <ArrowUpRight size={13} />
               </a>
-            </div>
+            </article>
           ))
         ) : (
           <EmptyState
             icon={FileText}
-            title="No documents found"
-            body="Upload supporting evidence from Knowledge or inside a decision."
+            title={search.trim() ? "No matching documents" : "No documents yet"}
+            body={
+              search.trim()
+                ? "Try a different filename, decision, category or tag."
+                : "Upload a supporting document and link it to a decision."
+            }
           />
         )}
       </div>
+
+      {uploadOpen && (
+        <div
+          className="document-upload-modal-backdrop-v2"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeUpload();
+            }
+          }}
+        >
+          <div
+            className="document-upload-modal-v2"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-upload-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="document-upload-modal-header-v2">
+              <div>
+                <span className="section-label">DOCUMENTS</span>
+
+                <h2 id="document-upload-title">Upload supporting evidence</h2>
+
+                <p>
+                  Attach a file directly to a decision so it appears in the
+                  decision workspace and Knowledge Graph.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="document-upload-modal-close-v2"
+                onClick={closeUpload}
+                disabled={uploading}
+                aria-label="Close upload dialog"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="document-upload-form-v2">
+              <label className="document-upload-dropzone-v2">
+                <input
+                  type="file"
+                  onChange={(event) => {
+                    setSelectedFile(event.target.files?.[0] || null);
+                    setUploadError("");
+                    setUploadSuccess("");
+                  }}
+                />
+
+                <span className="document-upload-dropzone-icon-v2">
+                  <FolderOpen size={18} />
+                </span>
+
+                <span>
+                  <strong>
+                    {selectedFile ? selectedFile.name : "Choose a document"}
+                  </strong>
+
+                  <small>
+                    PDF, DOCX, PPTX, XLSX and other project files · up to 25 MB
+                  </small>
+                </span>
+              </label>
+
+              <div className="document-upload-fields-v2">
+                <label>
+                  <span>Decision</span>
+
+                  <select
+                    value={selectedDecisionId}
+                    onChange={(event) =>
+                      setSelectedDecisionId(event.target.value)
+                    }
+                    disabled={loadingDecisions || uploading}
+                  >
+                    {loadingDecisions ? (
+                      <option value="">Loading decisions...</option>
+                    ) : decisions.length ? (
+                      decisions.map((decision) => (
+                        <option key={decision.id} value={decision.id}>
+                          {decision.title}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">No decisions available</option>
+                    )}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Category</span>
+
+                  <select
+                    value={documentCategory}
+                    onChange={(event) =>
+                      setDocumentCategory(event.target.value)
+                    }
+                    disabled={uploading}
+                  >
+                    {DOCUMENT_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="wide">
+                  <span>Tags</span>
+
+                  <input
+                    value={documentTags}
+                    onChange={(event) => setDocumentTags(event.target.value)}
+                    placeholder="architecture, research, security"
+                    disabled={uploading}
+                  />
+                </label>
+              </div>
+
+              {uploadError && (
+                <div className="document-upload-message-v2 error">
+                  {uploadError}
+                </div>
+              )}
+
+              {uploadSuccess && (
+                <div className="document-upload-message-v2 success">
+                  {uploadSuccess}
+                </div>
+              )}
+
+              <div className="document-upload-modal-actions-v2">
+                <button
+                  type="button"
+                  className="modal-secondary"
+                  onClick={closeUpload}
+                  disabled={uploading}
+                >
+                  {uploadSuccess ? "Done" : "Cancel"}
+                </button>
+
+                <button
+                  type="button"
+                  className="modal-primary"
+                  onClick={handleDocumentUpload}
+                  disabled={uploading || !selectedFile || !selectedDecisionId}
+                >
+                  {uploading ? "Uploading..." : "Upload document"}
+                  <ArrowUpRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
