@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   BarChart3,
@@ -512,218 +513,225 @@ function TeamsPage({
           ))}
         </div>
       )}
-      {selected && (
-        <div
-          className="workspace-overlay"
-          role="presentation"
-          onClick={() => setSelected(null)}
-        >
+      {selected &&
+        createPortal(
           <div
-            className="team-detail-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selected.name} team details`}
-            onClick={(event) => event.stopPropagation()}
+            className="workspace-overlay"
+            role="presentation"
+            onClick={() => setSelected(null)}
           >
-            <div className="team-detail-header">
-              <div>
-                <span className="section-label">TEAM WORKSPACE</span>
-                <h2>{selected.name}</h2>
-                <p>
-                  {selected.description || "Decision collaboration workspace"}
-                </p>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setSelected(null)}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            {detailLoading ? (
-              <EmptyState
-                icon={Clock3}
-                title="Loading team"
-                body="Fetching members, activity and decisions."
-              />
-            ) : (
-              <>
-                <div className="module-stat-grid team-stats">
-                  <div className="module-stat-card">
-                    <span>Decisions</span>
-                    <strong>{selected._count?.decisions || 0}</strong>
-                    <small>Linked to this team</small>
-                  </div>
-                  <div className="module-stat-card">
-                    <span>Your contribution</span>
-                    <strong>
-                      {selected.contributionSummary?.myContributions || 0}
-                    </strong>
-                    <small>Recorded activities</small>
-                  </div>
-                  <div className="module-stat-card">
-                    <span>Your decisions</span>
-                    <strong>
-                      {selected.contributionSummary?.myDecisions || 0}
-                    </strong>
-                    <small>Created by you</small>
-                  </div>
+            <div
+              className="team-detail-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${selected.name} team details`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="team-detail-header">
+                <div>
+                  <span className="section-label">TEAM WORKSPACE</span>
+                  <h2>{selected.name}</h2>
+                  <p>
+                    {selected.description || "Decision collaboration workspace"}
+                  </p>
                 </div>
-                <div className="team-detail-grid">
-                  <div className="team-panel-card">
-                    <div className="lower-card-header">
-                      <div>
-                        <span className="section-label">MEMBERS</span>
-                        <h3>Team contribution</h3>
-                      </div>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {detailLoading ? (
+                <EmptyState
+                  icon={Clock3}
+                  title="Loading team"
+                  body="Fetching members, activity and decisions."
+                />
+              ) : (
+                <>
+                  <div className="module-stat-grid team-stats">
+                    <div className="module-stat-card">
+                      <span>Decisions</span>
+                      <strong>{selected._count?.decisions || 0}</strong>
+                      <small>Linked to this team</small>
                     </div>
-                    {selected.memberContributions?.map((member) => (
-                      <div
-                        className="member-contribution-row"
-                        key={member.user.id}
-                      >
-                        <div className="member-mini-avatar">
-                          {member.user.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <strong>{member.user.name}</strong>
-                          <span>
-                            {member.teamRole} · {member.user.role}
-                          </span>
-                        </div>
-                        <div className="member-contribution-numbers">
-                          <strong>{member.decisionsContributed}</strong>
-                          <span>decisions</span>
-                        </div>
-                        <div className="member-contribution-numbers">
-                          <strong>{member.contributions}</strong>
-                          <span>activities</span>
-                        </div>
-                      </div>
-                    ))}
+                    <div className="module-stat-card">
+                      <span>Your contribution</span>
+                      <strong>
+                        {selected.contributionSummary?.myContributions || 0}
+                      </strong>
+                      <small>Recorded activities</small>
+                    </div>
+                    <div className="module-stat-card">
+                      <span>Your decisions</span>
+                      <strong>
+                        {selected.contributionSummary?.myDecisions || 0}
+                      </strong>
+                      <small>Created by you</small>
+                    </div>
                   </div>
-                  <div className="team-panel-card">
-                    <div className="lower-card-header">
-                      <div>
-                        <span className="section-label">RECENT ACTIVITY</span>
-                        <h3>What changed</h3>
+                  <div className="team-detail-grid">
+                    <div className="team-panel-card">
+                      <div className="lower-card-header">
+                        <div>
+                          <span className="section-label">MEMBERS</span>
+                          <h3>Team contribution</h3>
+                        </div>
                       </div>
-                    </div>
-                    {selected.recentActivity?.length ? (
-                      selected.recentActivity.slice(0, 6).map((item) => (
-                        <div className="team-activity-row" key={item.id}>
-                          <div className="activity-status approved" />
+                      {selected.memberContributions?.map((member) => (
+                        <div
+                          className="member-contribution-row"
+                          key={member.user.id}
+                        >
+                          <div className="member-mini-avatar">
+                            {member.user.name.charAt(0).toUpperCase()}
+                          </div>
                           <div>
-                            <strong>{item.action.replaceAll("_", " ")}</strong>
+                            <strong>{member.user.name}</strong>
                             <span>
-                              {item.user?.name || "Workspace member"} ·{" "}
-                              {formatRelative(item.createdAt)}
+                              {member.teamRole} · {member.user.role}
                             </span>
                           </div>
+                          <div className="member-contribution-numbers">
+                            <strong>{member.decisionsContributed}</strong>
+                            <span>decisions</span>
+                          </div>
+                          <div className="member-contribution-numbers">
+                            <strong>{member.contributions}</strong>
+                            <span>activities</span>
+                          </div>
                         </div>
-                      ))
-                    ) : (
-                      <EmptyState
-                        icon={Users}
-                        title="No activity yet"
-                        body="Team activity appears as members work."
-                      />
-                    )}
-                  </div>
-                </div>
-                <div className="team-panel-card">
-                  <div className="lower-card-header">
-                    <div>
-                      <span className="section-label">DECISIONS</span>
-                      <h3>Team decisions</h3>
+                      ))}
                     </div>
-                  </div>
-                  <div className="workspace-decisions-list compact-team-decision-list">
-                    {selected.decisions?.length ? (
-                      selected.decisions.map((decision) => (
-                        <div
-                          className="workspace-decision-card"
-                          key={decision.id}
-                        >
-                          <div className="decision-left">
-                            <div className="decision-info">
-                              <strong>{decision.title}</strong>
+                    <div className="team-panel-card">
+                      <div className="lower-card-header">
+                        <div>
+                          <span className="section-label">RECENT ACTIVITY</span>
+                          <h3>What changed</h3>
+                        </div>
+                      </div>
+                      {selected.recentActivity?.length ? (
+                        selected.recentActivity.slice(0, 6).map((item) => (
+                          <div className="team-activity-row" key={item.id}>
+                            <div className="activity-status approved" />
+                            <div>
+                              <strong>
+                                {item.action.replaceAll("_", " ")}
+                              </strong>
                               <span>
-                                {decision.createdBy?.name || "Workspace member"}
+                                {item.user?.name || "Workspace member"} ·{" "}
+                                {formatRelative(item.createdAt)}
                               </span>
                             </div>
                           </div>
-                          <span
-                            className={`status status-${statusClass(decision.status)}`}
-                          >
-                            <span />
-                            {statusLabel(decision.status)}
-                          </span>
-                          <span className="decision-date">
-                            {formatDate(decision.updatedAt)}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <EmptyState
-                        icon={FileText}
-                        title="No team decisions"
-                        body="Link a decision to this team to build the workspace history."
-                      />
-                    )}
+                        ))
+                      ) : (
+                        <EmptyState
+                          icon={Users}
+                          title="No activity yet"
+                          body="Team activity appears as members work."
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-                {canManageMembers && (
-                  <form
-                    className="module-form-card team-member-form"
-                    onSubmit={addMember}
-                  >
-                    <div>
-                      <div className="panel-kicker">TEAM ADMINISTRATION</div>
-                      <h3>Add a member</h3>
+                  <div className="team-panel-card">
+                    <div className="lower-card-header">
+                      <div>
+                        <span className="section-label">DECISIONS</span>
+                        <h3>Team decisions</h3>
+                      </div>
                     </div>
-                    <div className="module-form-grid two-columns">
-                      <select
-                        value={memberUserId}
-                        onChange={(event) =>
-                          setMemberUserId(event.target.value)
-                        }
-                      >
-                        <option value="">Select user</option>
-                        {users
-                          .filter(
-                            (user) =>
-                              !selected.members?.some(
-                                (member) => member.userId === user.id,
-                              ),
-                          )
-                          .map((user) => (
-                            <option key={user.id} value={user.id}>
-                              {user.name} · {user.role}
-                            </option>
-                          ))}
-                      </select>
-                      <select
-                        value={memberRole}
-                        onChange={(event) => setMemberRole(event.target.value)}
-                      >
-                        <option>Member</option>
-                        <option>Lead</option>
-                        <option>Manager</option>
-                      </select>
+                    <div className="workspace-decisions-list compact-team-decision-list">
+                      {selected.decisions?.length ? (
+                        selected.decisions.map((decision) => (
+                          <div
+                            className="workspace-decision-card"
+                            key={decision.id}
+                          >
+                            <div className="decision-left">
+                              <div className="decision-info">
+                                <strong>{decision.title}</strong>
+                                <span>
+                                  {decision.createdBy?.name ||
+                                    "Workspace member"}
+                                </span>
+                              </div>
+                            </div>
+                            <span
+                              className={`status status-${statusClass(decision.status)}`}
+                            >
+                              <span />
+                              {statusLabel(decision.status)}
+                            </span>
+                            <span className="decision-date">
+                              {formatDate(decision.updatedAt)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <EmptyState
+                          icon={FileText}
+                          title="No team decisions"
+                          body="Link a decision to this team to build the workspace history."
+                        />
+                      )}
                     </div>
-                    <button className="modal-primary" type="submit">
-                      Add member <ArrowUpRight size={14} />
-                    </button>
-                  </form>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+                  </div>
+                  {canManageMembers && (
+                    <form
+                      className="module-form-card team-member-form"
+                      onSubmit={addMember}
+                    >
+                      <div>
+                        <div className="panel-kicker">TEAM ADMINISTRATION</div>
+                        <h3>Add a member</h3>
+                      </div>
+                      <div className="module-form-grid two-columns">
+                        <select
+                          value={memberUserId}
+                          onChange={(event) =>
+                            setMemberUserId(event.target.value)
+                          }
+                        >
+                          <option value="">Select user</option>
+                          {users
+                            .filter(
+                              (user) =>
+                                !selected.members?.some(
+                                  (member) => member.userId === user.id,
+                                ),
+                            )
+                            .map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.name} · {user.role}
+                              </option>
+                            ))}
+                        </select>
+                        <select
+                          value={memberRole}
+                          onChange={(event) =>
+                            setMemberRole(event.target.value)
+                          }
+                        >
+                          <option>Member</option>
+                          <option>Lead</option>
+                          <option>Manager</option>
+                        </select>
+                      </div>
+                      <button className="modal-primary" type="submit">
+                        Add member <ArrowUpRight size={14} />
+                      </button>
+                    </form>
+                  )}
+                </>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }
@@ -2642,163 +2650,166 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
         )}
       </div>
 
-      {uploadOpen && (
-        <div
-          className="document-upload-modal-backdrop-v2"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              closeUpload();
-            }
-          }}
-        >
+      {uploadOpen &&
+        createPortal(
           <div
-            className="document-upload-modal-v2"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="document-upload-title"
-            onMouseDown={(event) => event.stopPropagation()}
+            className="document-upload-modal-backdrop-v2"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeUpload();
+              }
+            }}
           >
-            <div className="document-upload-modal-header-v2">
-              <div>
-                <span className="section-label">DOCUMENTS</span>
+            <div
+              className="document-upload-modal-v2"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="document-upload-title"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="document-upload-modal-header-v2">
+                <div>
+                  <span className="section-label">DOCUMENTS</span>
 
-                <h2 id="document-upload-title">Upload supporting evidence</h2>
+                  <h2 id="document-upload-title">Upload supporting evidence</h2>
 
-                <p>
-                  Attach a file directly to a decision so it appears in the
-                  decision workspace and Knowledge Graph.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                className="document-upload-modal-close-v2"
-                onClick={closeUpload}
-                disabled={uploading}
-                aria-label="Close upload dialog"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="document-upload-form-v2">
-              <label className="document-upload-dropzone-v2">
-                <input
-                  type="file"
-                  onChange={(event) => {
-                    setSelectedFile(event.target.files?.[0] || null);
-                    setUploadError("");
-                    setUploadSuccess("");
-                  }}
-                />
-
-                <span className="document-upload-dropzone-icon-v2">
-                  <FolderOpen size={18} />
-                </span>
-
-                <span>
-                  <strong>
-                    {selectedFile ? selectedFile.name : "Choose a document"}
-                  </strong>
-
-                  <small>
-                    PDF, DOCX, PPTX, XLSX and other project files · up to 25 MB
-                  </small>
-                </span>
-              </label>
-
-              <div className="document-upload-fields-v2">
-                <label>
-                  <span>Decision</span>
-
-                  <select
-                    value={selectedDecisionId}
-                    onChange={(event) =>
-                      setSelectedDecisionId(event.target.value)
-                    }
-                    disabled={loadingDecisions || uploading}
-                  >
-                    {loadingDecisions ? (
-                      <option value="">Loading decisions...</option>
-                    ) : decisions.length ? (
-                      decisions.map((decision) => (
-                        <option key={decision.id} value={decision.id}>
-                          {decision.title}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No decisions available</option>
-                    )}
-                  </select>
-                </label>
-
-                <label>
-                  <span>Category</span>
-
-                  <select
-                    value={documentCategory}
-                    onChange={(event) =>
-                      setDocumentCategory(event.target.value)
-                    }
-                    disabled={uploading}
-                  >
-                    {DOCUMENT_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="wide">
-                  <span>Tags</span>
-
-                  <input
-                    value={documentTags}
-                    onChange={(event) => setDocumentTags(event.target.value)}
-                    placeholder="architecture, research, security"
-                    disabled={uploading}
-                  />
-                </label>
-              </div>
-
-              {uploadError && (
-                <div className="document-upload-message-v2 error">
-                  {uploadError}
+                  <p>
+                    Attach a file directly to a decision so it appears in the
+                    decision workspace and Knowledge Graph.
+                  </p>
                 </div>
-              )}
 
-              {uploadSuccess && (
-                <div className="document-upload-message-v2 success">
-                  {uploadSuccess}
-                </div>
-              )}
-
-              <div className="document-upload-modal-actions-v2">
                 <button
                   type="button"
-                  className="modal-secondary"
+                  className="document-upload-modal-close-v2"
                   onClick={closeUpload}
                   disabled={uploading}
+                  aria-label="Close upload dialog"
                 >
-                  {uploadSuccess ? "Done" : "Cancel"}
-                </button>
-
-                <button
-                  type="button"
-                  className="modal-primary"
-                  onClick={handleDocumentUpload}
-                  disabled={uploading || !selectedFile || !selectedDecisionId}
-                >
-                  {uploading ? "Uploading..." : "Upload document"}
-                  <ArrowUpRight size={14} />
+                  <X size={16} />
                 </button>
               </div>
+
+              <div className="document-upload-form-v2">
+                <label className="document-upload-dropzone-v2">
+                  <input
+                    type="file"
+                    onChange={(event) => {
+                      setSelectedFile(event.target.files?.[0] || null);
+                      setUploadError("");
+                      setUploadSuccess("");
+                    }}
+                  />
+
+                  <span className="document-upload-dropzone-icon-v2">
+                    <FolderOpen size={18} />
+                  </span>
+
+                  <span>
+                    <strong>
+                      {selectedFile ? selectedFile.name : "Choose a document"}
+                    </strong>
+
+                    <small>
+                      PDF, DOCX, PPTX, XLSX and other project files · up to 25
+                      MB
+                    </small>
+                  </span>
+                </label>
+
+                <div className="document-upload-fields-v2">
+                  <label>
+                    <span>Decision</span>
+
+                    <select
+                      value={selectedDecisionId}
+                      onChange={(event) =>
+                        setSelectedDecisionId(event.target.value)
+                      }
+                      disabled={loadingDecisions || uploading}
+                    >
+                      {loadingDecisions ? (
+                        <option value="">Loading decisions...</option>
+                      ) : decisions.length ? (
+                        decisions.map((decision) => (
+                          <option key={decision.id} value={decision.id}>
+                            {decision.title}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No decisions available</option>
+                      )}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Category</span>
+
+                    <select
+                      value={documentCategory}
+                      onChange={(event) =>
+                        setDocumentCategory(event.target.value)
+                      }
+                      disabled={uploading}
+                    >
+                      {DOCUMENT_CATEGORIES.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="wide">
+                    <span>Tags</span>
+
+                    <input
+                      value={documentTags}
+                      onChange={(event) => setDocumentTags(event.target.value)}
+                      placeholder="architecture, research, security"
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
+
+                {uploadError && (
+                  <div className="document-upload-message-v2 error">
+                    {uploadError}
+                  </div>
+                )}
+
+                {uploadSuccess && (
+                  <div className="document-upload-message-v2 success">
+                    {uploadSuccess}
+                  </div>
+                )}
+
+                <div className="document-upload-modal-actions-v2">
+                  <button
+                    type="button"
+                    className="modal-secondary"
+                    onClick={closeUpload}
+                    disabled={uploading}
+                  >
+                    {uploadSuccess ? "Done" : "Cancel"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="modal-primary"
+                    onClick={handleDocumentUpload}
+                    disabled={uploading || !selectedFile || !selectedDecisionId}
+                  >
+                    {uploading ? "Uploading..." : "Upload document"}
+                    <ArrowUpRight size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }

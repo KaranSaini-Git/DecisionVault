@@ -10,14 +10,14 @@
   --dv-text-secondary: #58645d;
   --dv-text-muted: #8a948e;
 
-  --dv-green: #176b3a;
-  --dv-green-dark: #10572e;
-  --dv-green-bright: #27844e;
-  --dv-green-light: #e0f0e5;
-  --dv-green-pale: #edf7f0;
+  --dv-green: #0f766e;
+  --dv-green-dark: #115e59;
+  --dv-green-bright: #14b8a6;
+  --dv-green-light: #ccfbf1;
+  --dv-green-pale: #f0fdfa;
 
   --dv-border: rgba(16, 21, 18, 0.08);
-  --dv-border-green: rgba(23, 107, 58, 0.17);
+  --dv-border-green: rgba(15, 118, 110, 0.17);
 
   --dv-radius: 28px;
 }
@@ -62,7 +62,7 @@ button:focus-visible {
   background:
     radial-gradient(
       circle at 75% 5%,
-      rgba(100, 160, 118, 0.09),
+      rgba(20, 184, 166, 0.09),
       transparent 28%
     ),
     var(--dv-off-white);
@@ -117,14 +117,14 @@ button:focus-visible {
   left: -220px;
   top: 25%;
 
-  background: #70a983;
+  background: #5eead4;
 }
 
 .dv-glow-right {
   right: -220px;
   bottom: 10%;
 
-  background: #9bc4a7;
+  background: #99f6e4;
 }
 
 /* ==========================================
@@ -181,7 +181,7 @@ button:focus-visible {
   cursor: pointer;
 
   font-family: "Manrope", sans-serif;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
 
   letter-spacing: -0.04em;
@@ -204,7 +204,7 @@ button:focus-visible {
 
   background: var(--dv-green);
 
-  box-shadow: 0 5px 16px rgba(23, 107, 58, 0.2);
+  box-shadow: 0 5px 16px rgba(15, 118, 110, 0.2);
 }
 
 /* navigation */
@@ -230,7 +230,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
 
   transition:
@@ -262,7 +262,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 
   transition: 180ms ease;
@@ -410,7 +410,7 @@ button:focus-visible {
 
   color: var(--dv-green);
 
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -422,7 +422,7 @@ button:focus-visible {
 
   background: var(--dv-green);
 
-  box-shadow: 0 0 0 4px rgba(23, 107, 58, 0.08);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.08);
 }
 
 .dv-hero h1 {
@@ -450,7 +450,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 19px;
+  font-size: 16px;
 
   line-height: 1.8;
 }
@@ -481,7 +481,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 
   transition: 220ms ease;
@@ -494,7 +494,7 @@ button:focus-visible {
 
   color: white;
 
-  box-shadow: 0 8px 25px rgba(23, 107, 58, 0.13);
+  box-shadow: 0 8px 25px rgba(15, 118, 110, 0.13);
 }
 
 .dv-primary:hover {
@@ -502,7 +502,7 @@ button:focus-visible {
 
   transform: translateY(-2px);
 
-  box-shadow: 0 13px 30px rgba(23, 107, 58, 0.2);
+  box-shadow: 0 13px 30px rgba(15, 118, 110, 0.2);
 }
 
 .dv-secondary {
@@ -540,7 +540,7 @@ button:focus-visible {
 
   color: var(--dv-text-muted);
 
-  font-size: 12px;
+  font-size: 10px;
 
   text-transform: uppercase;
 
@@ -574,7 +574,7 @@ button:focus-visible {
 
   cursor: pointer;
 
-  font-size: 11px;
+  font-size: 9px;
 
   text-transform: uppercase;
 
@@ -620,7 +620,7 @@ button:focus-visible {
 .dv-orbit {
   position: absolute;
 
-  border: 1px solid rgba(23, 107, 58, 0.13);
+  border: 1px solid rgba(15, 118, 110, 0.13);
 
   border-radius: 50%;
 }
@@ -824,13 +824,13 @@ button:focus-visible {
 
   color: rgba(210, 245, 220, 0.5);
 
-  font-size: 10px;
+  font-size: 8px;
 
   letter-spacing: 0.15em;
 }
 
 .dv-vault-label strong {
-  font-size: 12px;
+  font-size: 10px;
 }
 
 /* shadow */
@@ -885,12 +885,12 @@ button:focus-visible {
 
 .dv-vault-card span {
   color: var(--dv-text-muted);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .dv-vault-card strong {
   color: var(--dv-text);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .dv-card-one {
@@ -935,7 +935,7 @@ button:focus-visible {
 
   color: var(--dv-green);
 
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
 
   letter-spacing: 0.12em;
@@ -964,7 +964,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 18px;
+  font-size: 15px;
 
   line-height: 1.75;
 }
@@ -981,7 +981,7 @@ button:focus-visible {
 .dv-workflow {
   background: radial-gradient(
     circle at 0% 50%,
-    rgba(91, 151, 110, 0.07),
+    rgba(20, 184, 166, 0.07),
     transparent 32%
   );
 }
@@ -1032,7 +1032,7 @@ button:focus-visible {
   background:
     radial-gradient(
       circle at 80% 80%,
-      rgba(75, 155, 97, 0.09),
+      rgba(20, 184, 166, 0.09),
       transparent 28%
     ),
     white;
@@ -1060,9 +1060,9 @@ button:focus-visible {
   top: 27px;
   right: 27px;
 
-  color: #9da69f;
+  color: #8a948d;
 
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
 }
 
@@ -1071,7 +1071,7 @@ button:focus-visible {
 
   font-family: "Manrope", sans-serif;
 
-  font-size: 28px;
+  font-size: 23px;
 
   letter-spacing: -0.045em;
 }
@@ -1083,7 +1083,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 16px;
+  font-size: 13px;
 
   line-height: 1.8;
 }
@@ -1106,7 +1106,7 @@ button:focus-visible {
 
   border-radius: 99px;
 
-  background: #e1e7e1;
+  background: #d7edea;
 }
 
 .dv-lines span:nth-child(1) {
@@ -1181,9 +1181,9 @@ button:focus-visible {
 }
 
 .dv-feature-top > span {
-  color: #9da69f;
+  color: #8a948d;
 
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -1192,7 +1192,7 @@ button:focus-visible {
 
   font-family: "Manrope", sans-serif;
 
-  font-size: 23px;
+  font-size: 19px;
 
   letter-spacing: -0.04em;
 }
@@ -1202,7 +1202,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 16px;
+  font-size: 13px;
 
   line-height: 1.75;
 }
@@ -1294,7 +1294,7 @@ button:focus-visible {
 
   color: var(--dv-text-secondary);
 
-  font-size: 18px;
+  font-size: 15px;
 
   line-height: 1.8;
 }
@@ -1322,13 +1322,13 @@ button:focus-visible {
     rgba(220, 238, 225, 0.8)
   );
 
-  box-shadow: 0 30px 80px rgba(23, 107, 58, 0.1);
+  box-shadow: 0 30px 80px rgba(15, 118, 110, 0.1);
 }
 
 .dv-vision-symbol div {
   position: absolute;
 
-  border: 1px solid rgba(23, 107, 58, 0.14);
+  border: 1px solid rgba(15, 118, 110, 0.14);
 
   border-radius: 50%;
 }
@@ -1362,7 +1362,7 @@ button:focus-visible {
 
   color: #8b958f;
 
-  font-size: 12px;
+  font-size: 10px;
 }
 
 /* ==========================================
@@ -1578,7 +1578,7 @@ button:focus-visible {
   }
 
   .dv-hero-content > p {
-    font-size: 17px;
+    font-size: 14px;
   }
 
   .dv-vault-stage {
@@ -1650,7 +1650,7 @@ button:focus-visible {
   }
 
   .dv-stats div {
-    font-size: 10px;
+    font-size: 8px;
   }
 
   .dv-vault-stage {
@@ -1704,7 +1704,7 @@ button:focus-visible {
   background: rgba(255, 255, 255, 0.72);
   color: var(--dv-text-secondary);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   transition: 180ms ease;
 }
@@ -1759,13 +1759,17 @@ button:focus-visible {
   width: 360px;
   height: 360px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(23, 107, 58, 0.11), transparent 68%);
+  background: radial-gradient(
+    circle,
+    rgba(15, 118, 110, 0.11),
+    transparent 68%
+  );
   filter: blur(4px);
 }
 
 .dv-vision-orbit {
   position: absolute;
-  border: 1px solid rgba(23, 107, 58, 0.13);
+  border: 1px solid rgba(15, 118, 110, 0.13);
   border-radius: 50%;
 }
 
@@ -1794,12 +1798,12 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 11px;
-  border: 1px solid rgba(23, 107, 58, 0.16);
+  border: 1px solid rgba(15, 118, 110, 0.16);
   border-radius: 50%;
   background: radial-gradient(circle at 50% 35%, #ffffff, #e1eee4);
   color: var(--dv-green);
   box-shadow:
-    0 28px 70px rgba(23, 107, 58, 0.1),
+    0 28px 70px rgba(15, 118, 110, 0.1),
     inset 0 1px rgba(255, 255, 255, 0.95);
 }
 
@@ -1807,13 +1811,13 @@ button:focus-visible {
   position: absolute;
   inset: 18px;
   border-radius: 50%;
-  border: 1px solid rgba(23, 107, 58, 0.1);
-  box-shadow: 0 0 0 16px rgba(23, 107, 58, 0.035);
+  border: 1px solid rgba(15, 118, 110, 0.1);
+  box-shadow: 0 0 0 16px rgba(15, 118, 110, 0.035);
 }
 
 .dv-memory-core span {
   position: relative;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -1841,12 +1845,12 @@ button:focus-visible {
 
 .dv-memory-card span {
   color: var(--dv-text-muted);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .dv-memory-card strong {
   color: var(--dv-text);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .dv-memory-icon {
@@ -1882,9 +1886,9 @@ button:focus-visible {
   place-items: center;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(23, 107, 58, 0.13);
+  border: 1px solid rgba(15, 118, 110, 0.13);
   color: var(--dv-green);
-  box-shadow: 0 10px 25px rgba(23, 107, 58, 0.07);
+  box-shadow: 0 10px 25px rgba(15, 118, 110, 0.07);
 }
 
 .dv-connection-one {
@@ -1909,7 +1913,7 @@ button:focus-visible {
   align-items: center;
   gap: 20px;
   color: #7f8983;
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .dv-footer-brand {
@@ -1948,7 +1952,7 @@ button:focus-visible {
   background: transparent;
   color: #7f8983;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   transition: color 180ms ease;
 }
@@ -2105,15 +2109,25 @@ button:focus-visible {
   }
 
   .dv-memory-card strong {
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .dv-memory-card span {
-    font-size: 10px;
+    font-size: 8px;
   }
 
   .dv-memory-core {
     width: 145px;
     height: 145px;
   }
+}
+
+/* DecisionVault — Teal design tokens */
+:root {
+  --dv-primary-teal: #0f766e;
+  --dv-hover-teal: #115e59;
+  --dv-soft-teal: #ccfbf1;
+  --dv-light-surface: #f0fdfa;
+  --dv-border-teal: #99f6e4;
+  --dv-accent-teal: #14b8a6;
 }
