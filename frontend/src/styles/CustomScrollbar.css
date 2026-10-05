@@ -1,0 +1,53 @@
+/* Small React-controlled scrollbar for the active workspace viewport. */
+.custom-scrollbar {
+  position: absolute;
+  top: 6px;
+  right: 3px;
+  bottom: 6px;
+  width: 5px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  transition: opacity 160ms ease;
+}
+
+.custom-scrollbar.is-visible {
+  opacity: 0.68;
+  pointer-events: auto;
+}
+
+.custom-scrollbar:hover,
+.custom-scrollbar:active {
+  opacity: 0.95;
+}
+
+.custom-scrollbar-thumb {
+  width: 4px;
+  min-height: 26px;
+  margin-left: 1px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.26);
+  cursor: grab;
+  touch-action: none;
+}
+
+.custom-scrollbar-thumb:hover {
+  background: rgba(15, 118, 110, 0.38);
+}
+
+.custom-scrollbar-thumb:active {
+  cursor: grabbing;
+  background: rgba(15, 118, 110, 0.48);
+}
+
+@media (max-width: 760px) {
+  .custom-scrollbar {
+    right: 2px;
+    width: 4px;
+  }
+
+  .custom-scrollbar-thumb {
+    width: 3px;
+    min-height: 24px;
+  }
+}

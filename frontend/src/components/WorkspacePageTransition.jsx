@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-function WorkspacePageTransition({ pageKey, children }) {
+function WorkspacePageTransition({ pageKey, children, scrollRef }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -17,6 +17,7 @@ function WorkspacePageTransition({ pageKey, children }) {
 
   return (
     <div
+      ref={scrollRef}
       className={`workspace-page-transition${visible ? " is-visible" : ""}`}
       data-page={pageKey}
     >

@@ -8,6 +8,7 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
+  ChevronDown,
   Clock3,
   Database,
   FileText,
@@ -30,6 +31,7 @@ import "../styles/Dashboard.css";
 import ApprovalPanel from "../components/ApprovalPanel.jsx";
 import AnimatedNumber from "../components/AnimatedNumber.jsx";
 import WorkspacePageTransition from "../components/WorkspacePageTransition.jsx";
+import CustomScrollbar from "../components/CustomScrollbar.jsx";
 import {
   ReviewsPage,
   TeamsPage,
@@ -65,6 +67,8 @@ const EMPTY_ALTERNATIVE_FORM = {
 function Dashboard() {
   const navigate = useNavigate();
   const modalRef = useRef(null);
+  const dashboardContentRef = useRef(null);
+  const overviewScrollRef = useRef(null);
 
   const [activePage, setActivePage] = useState("Overview");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -140,6 +144,12 @@ function Dashboard() {
     { label: "Users", icon: Users, show: isAdministrator },
     { label: "Audit & Compliance", icon: ShieldCheck, show: isAdministrator },
   ].filter((item) => item.show);
+
+  const primaryNavigation = navigation.slice(0, 7);
+  const secondaryNavigation = [
+    ...navigation.slice(7),
+    { label: "Settings", icon: Settings, show: true },
+  ];
 
   const getToken = () => {
     return localStorage.getItem("token");
@@ -1102,16 +1112,6 @@ function Dashboard() {
 
   const showDecisionsPage = activePage === "Decisions";
 
-  const roleDashboardCopy =
-    {
-      employee:
-        "Manage your decisions, activity and team knowledge from one workspace.",
-      reviewer: "Review assigned decisions and keep approval workflows moving.",
-      manager: "Monitor team decisions, approvals and decision performance.",
-      administrator:
-        "Monitor the organization’s decisions, activity and governance.",
-    }[role] || "Manage decisions and reviews from one intelligent workspace.";
-
   const donutStyle = totalDecisions
     ? {
         background: `conic-gradient(
@@ -1146,8 +1146,8 @@ function Dashboard() {
 
       <div className="dashboard-glow dashboard-glow-2" />
 
-      <header className="mobile-header">
-        <div className="dashboard-brand">
+      <header className="dashboard-nav-header">
+        <div className="dashboard-nav-brand">
           <div className="brand-mark">
             <LockKeyhole size={16} strokeWidth={2.2} />
           </div>
@@ -1158,31 +1158,233 @@ function Dashboard() {
         </div>
 
         <button
-          className="mobile-menu-button"
+          className="dashboard-nav-mobile-menu"
           onClick={() => setMobileOpen((value) => !value)}
           aria-label="Toggle navigation"
           type="button"
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-      </header>
 
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
-        <div>
-          <div className="sidebar-brand">
-            <div className="brand-mark">
-              <LockKeyhole size={16} strokeWidth={2.2} />
-            </div>
+        <nav className="dashboard-nav-main" aria-label="Primary navigation">
+          {primaryNavigation.map((item) => {
+            const Icon = item.icon;
 
-            <span>
-              Decision<span>Vault</span>
-            </span>
+            return (
+              <button
+                key={item.label}
+                className={
+                  activePage === item.label
+                    ? "top-nav-item active"
+                    : "top-nav-item"
+                }
+                onClick={() => handlePageChange(item.label)}
+                type="button"
+              >
+                <Icon size={15} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+
+          <div className="top-nav-more">
+            <button
+              className={
+                secondaryNavigation.some((item) => item.label === activePage)
+                  ? "top-nav-item top-nav-more-toggle active"
+                  : "top-nav-item top-nav-more-toggle"
+              }
+              onClick={() => {
+                setMoreMenu((value) => !value);
+                setProfileOpen(false);
+                setNotificationsOpen(false);
+              }}
+              type="button"
+              aria-expanded={Boolean(moreMenu)}
+            >
+              <MoreHorizontal size={16} />
+              <span>More</span>
+              <ChevronDown
+                size={14}
+                className={moreMenu ? "more-chevron open" : "more-chevron"}
+              />
+            </button>
+
+            {moreMenu && (
+              <div className="top-nav-more-menu">
+                {secondaryNavigation.map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <button
+                      key={item.label}
+                      className={
+                        activePage === item.label
+                          ? "top-nav-more-item active"
+                          : "top-nav-more-item"
+                      }
+                      onClick={() => handlePageChange(item.label)}
+                      type="button"
+                    >
+                      <Icon size={15} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+        </nav>
 
-          <div className="sidebar-section">
-            <span className="sidebar-label">Workspace</span>
+        <div className="dashboard-nav-search">
+          <Search size={17} />
 
-            <nav className="dashboard-nav">
+          <input
+            type="search"
+            placeholder="Search decisions, teams, documents..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label="Search decisions, teams, documents"
+          />
+
+          {searchQuery && (
+            <button
+              type="button"
+              className="search-clear"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="topbar-actions dashboard-nav-actions">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Notifications"
+            onClick={() => {
+              setNotificationsOpen((value) => !value);
+              setProfileOpen(false);
+              setMoreMenu(false);
+            }}
+          >
+            <Bell size={17} />
+
+            {unreadNotifications > 0 && <span className="notification-dot" />}
+          </button>
+
+          <button
+            className="topbar-profile"
+            type="button"
+            onClick={() => {
+              setProfileOpen((value) => !value);
+              setNotificationsOpen(false);
+              setMoreMenu(false);
+            }}
+          >
+            <span className="topbar-avatar">{initials[0]}</span>
+
+            <span className="topbar-profile-copy">
+              <strong>{currentUser?.name || "Decision Workspace"}</strong>
+              <small>{currentUser?.role || "Employee"}</small>
+            </span>
+
+            <ChevronRight size={15} className="profile-chevron" />
+          </button>
+        </div>
+
+        {notificationsOpen && (
+          <div className="topbar-popover notification-popover">
+            <div className="notification-popover-head">
+              <span className="popover-label">NOTIFICATIONS</span>
+              {unreadNotifications > 0 && (
+                <button type="button" onClick={markAllNotificationsRead}>
+                  Mark all read
+                </button>
+              )}
+            </div>
+            <div className="notification-list">
+              {notifications.length ? (
+                notifications.slice(0, 5).map((notification) => (
+                  <button
+                    type="button"
+                    className={`notification-item ${notification.isRead ? "read" : ""}`}
+                    key={notification.id}
+                    onClick={async () => {
+                      if (!notification.isRead) {
+                        await apiRequest(
+                          `/api/notifications/${notification.id}/read`,
+                          { method: "PATCH" },
+                        );
+                        await fetchNotifications();
+                      }
+                      if (
+                        notification.entityType === "Decision" &&
+                        notification.entityId
+                      ) {
+                        const decision = decisions.find(
+                          (item) => item.id === notification.entityId,
+                        );
+                        if (decision) {
+                          await openDecision(decision);
+                        } else {
+                          const decisionData = await apiRequest(
+                            `/api/decisions/${notification.entityId}`,
+                          );
+                          if (decisionData?.decision)
+                            await openDecision(decisionData.decision);
+                        }
+                      }
+                    }}
+                  >
+                    <span className="notification-item-icon">
+                      <Bell size={14} />
+                    </span>
+                    <span>
+                      <strong>{notification.title}</strong>
+                      <small>{notification.message}</small>
+                      <em>{formatRelativeTime(notification.createdAt)}</em>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="notification-empty">
+                  <Bell size={16} />
+                  <span>No new notifications.</span>
+                </div>
+              )}
+            </div>
+            {canReview && (
+              <button type="button" onClick={() => handlePageChange("Reviews")}>
+                Open reviews <ArrowUpRight size={13} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {profileOpen && (
+          <div className="topbar-popover profile-popover">
+            <span className="popover-label">ACCOUNT</span>
+
+            <strong>{currentUser?.name || "Decision Workspace"}</strong>
+
+            <button type="button" onClick={() => handlePageChange("Settings")}>
+              Settings
+              <ArrowUpRight size={13} />
+            </button>
+
+            <button type="button" onClick={handleLogout}>
+              Sign out
+              <ArrowUpRight size={13} />
+            </button>
+          </div>
+        )}
+
+        {mobileOpen && (
+          <div className="dashboard-nav-mobile-menu-panel">
+            <div className="dashboard-nav-mobile-links">
               {navigation.map((item) => {
                 const Icon = item.icon;
 
@@ -1190,242 +1392,48 @@ function Dashboard() {
                   <button
                     key={item.label}
                     className={
-                      activePage === item.label ? "nav-item active" : "nav-item"
+                      activePage === item.label
+                        ? "mobile-nav-item active"
+                        : "mobile-nav-item"
                     }
                     onClick={() => handlePageChange(item.label)}
                     type="button"
                   >
-                    <Icon size={17} />
-
+                    <Icon size={16} />
                     <span>{item.label}</span>
-
-                    {activePage === item.label && (
-                      <span className="nav-indicator" />
-                    )}
                   </button>
                 );
               })}
-            </nav>
-          </div>
-        </div>
 
-        <div className="sidebar-bottom">
-          <button
-            className={
-              activePage === "Settings" ? "nav-item active" : "nav-item"
-            }
-            onClick={() => handlePageChange("Settings")}
-            type="button"
-          >
-            <Settings size={17} />
-
-            <span>Settings</span>
-
-            {activePage === "Settings" && <span className="nav-indicator" />}
-          </button>
-
-          <button
-            className="sidebar-profile"
-            type="button"
-            onClick={() => setProfileOpen((value) => !value)}
-          >
-            <div className="profile-avatar">{initials[0]}</div>
-
-            <div className="profile-info">
-              <strong>
-                {userLoading
-                  ? "Loading account"
-                  : currentUser?.name || "Decision Workspace"}
-              </strong>
-
-              <span>{currentUser?.role || "Personal space"}</span>
+              <button
+                className={
+                  activePage === "Settings"
+                    ? "mobile-nav-item active"
+                    : "mobile-nav-item"
+                }
+                onClick={() => handlePageChange("Settings")}
+                type="button"
+              >
+                <Settings size={16} />
+                <span>Settings</span>
+              </button>
             </div>
-          </button>
-        </div>
-      </aside>
+          </div>
+        )}
+      </header>
 
       <main className="dashboard-main">
-        <div className="dashboard-content">
-          <header className="dashboard-topbar">
-            <div className="dashboard-search">
-              <Search size={17} />
-
-              <input
-                type="search"
-                placeholder="Search decisions, teams, documents..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                aria-label="Search decisions, teams, documents"
-              />
-
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="search-clear"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Clear search"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="topbar-actions">
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="Notifications"
-                onClick={() => {
-                  setNotificationsOpen((value) => !value);
-
-                  setProfileOpen(false);
-                }}
-              >
-                <Bell size={17} />
-
-                {unreadNotifications > 0 && (
-                  <span className="notification-dot" />
-                )}
-              </button>
-
-              <button
-                className="topbar-profile"
-                type="button"
-                onClick={() => {
-                  setProfileOpen((value) => !value);
-
-                  setNotificationsOpen(false);
-                }}
-              >
-                <span className="topbar-avatar">{initials[0]}</span>
-
-                <span className="topbar-profile-copy">
-                  <strong>{currentUser?.name || "Decision Workspace"}</strong>
-
-                  <small>{currentUser?.role || "Employee"}</small>
-                </span>
-
-                <ChevronRight size={15} className="profile-chevron" />
-              </button>
-            </div>
-
-            {notificationsOpen && (
-              <div className="topbar-popover notification-popover">
-                <div className="notification-popover-head">
-                  <span className="popover-label">NOTIFICATIONS</span>
-                  {unreadNotifications > 0 && (
-                    <button type="button" onClick={markAllNotificationsRead}>
-                      Mark all read
-                    </button>
-                  )}
-                </div>
-                <div className="notification-list">
-                  {notifications.length ? (
-                    notifications.slice(0, 5).map((notification) => (
-                      <button
-                        type="button"
-                        className={`notification-item ${notification.isRead ? "read" : ""}`}
-                        key={notification.id}
-                        onClick={async () => {
-                          if (!notification.isRead) {
-                            await apiRequest(
-                              `/api/notifications/${notification.id}/read`,
-                              { method: "PATCH" },
-                            );
-                            await fetchNotifications();
-                          }
-                          if (
-                            notification.entityType === "Decision" &&
-                            notification.entityId
-                          ) {
-                            const decision = decisions.find(
-                              (item) => item.id === notification.entityId,
-                            );
-                            if (decision) {
-                              await openDecision(decision);
-                            } else {
-                              const decisionData = await apiRequest(
-                                `/api/decisions/${notification.entityId}`,
-                              );
-                              if (decisionData?.decision)
-                                await openDecision(decisionData.decision);
-                            }
-                          }
-                        }}
-                      >
-                        <span className="notification-item-icon">
-                          <Bell size={14} />
-                        </span>
-                        <span>
-                          <strong>{notification.title}</strong>
-                          <small>{notification.message}</small>
-                          <em>{formatRelativeTime(notification.createdAt)}</em>
-                        </span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="notification-empty">
-                      <Bell size={16} />
-                      <span>No new notifications.</span>
-                    </div>
-                  )}
-                </div>
-                {canReview && (
-                  <button
-                    type="button"
-                    onClick={() => handlePageChange("Reviews")}
-                  >
-                    Open reviews <ArrowUpRight size={13} />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {profileOpen && (
-              <div className="topbar-popover profile-popover">
-                <span className="popover-label">ACCOUNT</span>
-
-                <strong>{currentUser?.name || "Decision Workspace"}</strong>
-
-                <button
-                  type="button"
-                  onClick={() => handlePageChange("Settings")}
-                >
-                  Settings
-                  <ArrowUpRight size={13} />
-                </button>
-
-                <button type="button" onClick={handleLogout}>
-                  Sign out
-                  <ArrowUpRight size={13} />
-                </button>
-              </div>
-            )}
-          </header>
-
+        <div className="dashboard-content" ref={dashboardContentRef}>
           <WorkspacePageTransition pageKey={activePage}>
             {showOverview && (
               <section className="overview-v4-page">
-                <div className="overview-v4-scroll">
+                <div className="overview-v4-scroll" ref={overviewScrollRef}>
                   <section className="overview-v4-hero">
                     <div className="overview-v4-hero-copy">
-                      <span className="overview-v4-eyebrow">
-                        <i /> DECISION INTELLIGENCE WORKSPACE
-                      </span>
                       <h1>
                         Good evening
                         {firstName !== "there" ? `, ${firstName}` : ""}.
                       </h1>
-                      <p>{roleDashboardCopy}</p>
-                      <div className="overview-v4-health">
-                        <span>Workspace health</span>
-                        <strong>{approvalRate}% approved</strong>
-                        <span className="overview-v4-health-track">
-                          <i
-                            style={{ width: `${Math.max(approvalRate, 4)}%` }}
-                          />
-                        </span>
-                      </div>
                     </div>
 
                     <div className="overview-v4-hero-actions">
@@ -2195,6 +2203,8 @@ function Dashboard() {
               )}
           </WorkspacePageTransition>
         </div>
+
+        <CustomScrollbar scrollRef={dashboardContentRef} pageKey={activePage} />
       </main>
 
       {modal &&
