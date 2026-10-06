@@ -6,7 +6,7 @@ The platform provides a centralized workflow for creating decisions, comparing a
 
 ## Live Application
 
-https://decision-vault-ks.vercel.app/dashboard
+https://decision-vault-ks.vercel.app
 
 ## Core Capabilities
 
