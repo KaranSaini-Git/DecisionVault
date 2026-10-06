@@ -177,25 +177,37 @@ function Dashboard() {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
+        const { responseType = "json", ...fetchOptions } = options;
+
         const response = await fetch(`${API_BASE_URL}${path}`, {
-          ...options,
+          ...fetchOptions,
           headers: {
-            ...(options.body && !(options.body instanceof FormData)
+            ...(fetchOptions.body && !(fetchOptions.body instanceof FormData)
               ? {
                   "Content-Type": "application/json",
                 }
               : {}),
-            ...(options.headers || {}),
+            ...(fetchOptions.headers || {}),
             Authorization: `Bearer ${token}`,
           },
         });
 
         let data = null;
 
-        try {
-          data = await response.json();
-        } catch {
-          data = null;
+        if (!response.ok) {
+          try {
+            data = await response.json();
+          } catch {
+            data = null;
+          }
+        } else if (responseType === "blob") {
+          data = await response.blob();
+        } else {
+          try {
+            data = await response.json();
+          } catch {
+            data = null;
+          }
         }
 
         if (response.status === 401) {
@@ -938,28 +950,50 @@ function Dashboard() {
       return;
     }
 
-    const newWindow = window.open(
-      "about:blank",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    // Open the tab synchronously from the click event so Chrome does not
+    // treat the document viewer as a popup created after an async request.
+    const newWindow = window.open("", "_blank");
+
+    if (!newWindow) {
+      alert("Please allow pop-ups for DecisionVault to open documents.");
+      return;
+    }
 
     try {
-      const responseData = await apiRequest(
-        `/api/decisions/${selectedDecision.id}/documents/${document.id}/url`,
+      newWindow.opener = null;
+      newWindow.document.title = "Opening document...";
+      newWindow.document.body.innerHTML = `
+        <div
+          style="
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 40px;
+            text-align: center;
+          "
+        >
+          Opening document...
+        </div>
+      `;
+
+      const fileBlob = await apiRequest(
+        `/api/decisions/${selectedDecision.id}/documents/${document.id}/content`,
+        { responseType: "blob" },
       );
 
-      if (!responseData?.url) {
-        throw new Error("Document URL was not returned.");
+      if (!(fileBlob instanceof Blob) || fileBlob.size === 0) {
+        throw new Error("The document file is empty or could not be loaded.");
       }
 
-      if (newWindow) {
-        newWindow.location.href = responseData.url;
-      } else {
-        window.open(responseData.url, "_blank", "noopener,noreferrer");
-      }
+      const objectUrl = URL.createObjectURL(fileBlob);
+      newWindow.location.replace(objectUrl);
+
+      // Keep the Blob URL alive while the browser finishes loading the file.
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (error) {
-      newWindow?.close();
+      try {
+        newWindow.close();
+      } catch {
+        // Ignore popup close errors.
+      }
 
       console.error("Open document error:", error);
 

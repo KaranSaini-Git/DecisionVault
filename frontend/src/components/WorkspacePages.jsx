@@ -19,7 +19,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -1277,28 +1276,47 @@ function KnowledgePage({
         return;
       }
 
-      const newWindow = window.open(
-        "about:blank",
-        "_blank",
-        "noopener,noreferrer",
-      );
+      // Open synchronously from the click event to avoid Chrome popup blocking.
+      const newWindow = window.open("", "_blank");
+
+      if (!newWindow) {
+        alert("Please allow pop-ups for DecisionVault to open documents.");
+        return;
+      }
 
       try {
-        const responseData = await apiRequest(
-          `/api/decisions/${decisionId}/documents/${documentId}/url`,
+        newWindow.opener = null;
+        newWindow.document.title = "Opening document...";
+        newWindow.document.body.innerHTML = `
+          <div
+            style="
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+              padding: 40px;
+              text-align: center;
+            "
+          >
+            Opening document...
+          </div>
+        `;
+
+        const fileBlob = await apiRequest(
+          `/api/decisions/${decisionId}/documents/${documentId}/content`,
+          { responseType: "blob" },
         );
 
-        if (!responseData?.url) {
-          throw new Error("Document URL was not returned.");
+        if (!(fileBlob instanceof Blob) || fileBlob.size === 0) {
+          throw new Error("The document file is empty or could not be loaded.");
         }
 
-        if (newWindow) {
-          newWindow.location.href = responseData.url;
-        } else {
-          window.open(responseData.url, "_blank", "noopener,noreferrer");
-        }
+        const objectUrl = URL.createObjectURL(fileBlob);
+        newWindow.location.replace(objectUrl);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
       } catch (error) {
-        newWindow?.close();
+        try {
+          newWindow.close();
+        } catch {
+          // Ignore popup close errors.
+        }
 
         console.error("Open graph document error:", error);
 
@@ -2601,32 +2619,55 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
                     return;
                   }
 
-                  const newWindow = window.open(
-                    "about:blank",
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
+                  // Open synchronously from the click event to avoid Chrome popup blocking.
+                  const newWindow = window.open("", "_blank");
+
+                  if (!newWindow) {
+                    alert(
+                      "Please allow pop-ups for DecisionVault to open documents.",
+                    );
+                    return;
+                  }
 
                   try {
-                    const responseData = await apiRequest(
-                      `/api/decisions/${decisionId}/documents/${documentId}/url`,
+                    newWindow.opener = null;
+                    newWindow.document.title = "Opening document...";
+                    newWindow.document.body.innerHTML = `
+                      <div
+                        style="
+                          font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                          padding: 40px;
+                          text-align: center;
+                        "
+                      >
+                        Opening document...
+                      </div>
+                    `;
+
+                    const fileBlob = await apiRequest(
+                      `/api/decisions/${decisionId}/documents/${documentId}/content`,
+                      { responseType: "blob" },
                     );
 
-                    if (!responseData?.url) {
-                      throw new Error("Document URL was not returned.");
-                    }
-
-                    if (newWindow) {
-                      newWindow.location.href = responseData.url;
-                    } else {
-                      window.open(
-                        responseData.url,
-                        "_blank",
-                        "noopener,noreferrer",
+                    if (!(fileBlob instanceof Blob) || fileBlob.size === 0) {
+                      throw new Error(
+                        "The document file is empty or could not be loaded.",
                       );
                     }
+
+                    const objectUrl = URL.createObjectURL(fileBlob);
+                    newWindow.location.replace(objectUrl);
+                    window.setTimeout(
+                      () => URL.revokeObjectURL(objectUrl),
+                      60_000,
+                    );
                   } catch (error) {
-                    newWindow?.close();
+                    try {
+                      newWindow.close();
+                    } catch {
+                      // Ignore popup close errors.
+                    }
+
                     console.error("Open document error:", error);
                     alert(error.message || "Unable to open the document.");
                   }
