@@ -19,6 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { openStoredDocument } from "../utils/documentViewer.js";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -88,9 +89,30 @@ function ReviewsPage({
   const [commentId, setCommentId] = useState(null);
   const [comments, setComments] = useState({});
 
+  const isAdminOversight = currentUser?.role === "Administrator";
+
   const load = async () => {
     try {
       setLoading(true);
+
+      /* Administrators get read-only oversight of all decisions currently under review. */
+      if (isAdminOversight) {
+        const oversightItems = (decisions || [])
+          .filter((decision) => decision.status === "UnderReview")
+          .map((decision) => ({
+            id: `oversight-${decision.id}`,
+            decisionId: decision.id,
+            level: null,
+            status: "Pending",
+            createdAt: decision.updatedAt || decision.createdAt,
+            requestedBy: decision.createdBy || null,
+            decision,
+          }));
+
+        setItems(oversightItems);
+        return;
+      }
+
       const data = await apiRequest("/api/approvals/pending");
       setItems(Array.isArray(data) ? data : data?.approvals || []);
     } catch (error) {
@@ -103,7 +125,7 @@ function ReviewsPage({
 
   useEffect(() => {
     load();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, decisions, isAdminOversight]);
 
   const act = async (approvalId, status) => {
     try {
@@ -152,9 +174,11 @@ function ReviewsPage({
           <span className="section-label">APPROVAL WORKFLOW</span>
           <h1>Reviews</h1>
           <p>
-            {currentUser?.role === "Manager"
-              ? "Complete final approvals after reviewer sign-off."
-              : "Review decisions assigned to you and keep approvals moving."}
+            {isAdminOversight
+              ? "Monitor decisions moving through the approval workflow."
+              : currentUser?.role === "Manager"
+                ? "Complete final approvals after reviewer sign-off."
+                : "Review decisions assigned to you and keep approvals moving."}
           </p>
         </div>
         <button className="compact-action" type="button" onClick={load}>
@@ -163,14 +187,20 @@ function ReviewsPage({
       </div>
       <div className="module-stat-grid">
         <div className="module-stat-card">
-          <span>Pending reviews</span>
+          <span>{isAdminOversight ? "Under review" : "Pending reviews"}</span>
           <strong>{filteredItems.length}</strong>
-          <small>Assigned to you</small>
+          <small>
+            {isAdminOversight ? "Across the workspace" : "Assigned to you"}
+          </small>
         </div>
         <div className="module-stat-card">
           <span>Stage</span>
           <strong>
-            {currentUser?.role === "Manager" ? "Final" : "Review"}
+            {isAdminOversight
+              ? "Oversight"
+              : currentUser?.role === "Manager"
+                ? "Final"
+                : "Review"}
           </strong>
           <small>{currentUser?.role || "Reviewer"} workspace</small>
         </div>
@@ -185,11 +215,19 @@ function ReviewsPage({
         ) : filteredItems.length === 0 ? (
           <EmptyState
             icon={CheckCircle2}
-            title={globalSearch ? "No reviews found" : "You’re all caught up"}
+            title={
+              globalSearch
+                ? "No reviews found"
+                : isAdminOversight
+                  ? "No decisions under review"
+                  : "You’re all caught up"
+            }
             body={
               globalSearch
                 ? "Try a different search term."
-                : "There are no pending decisions waiting for you."
+                : isAdminOversight
+                  ? "All decisions have completed their approval workflow."
+                  : "There are no pending decisions waiting for you."
             }
           />
         ) : (
@@ -204,10 +242,14 @@ function ReviewsPage({
                     <ShieldCheck size={19} />
                   </div>
                   <div className="review-module-copy">
-                    <div className="panel-kicker">LEVEL {approval.level}</div>
+                    <div className="panel-kicker">
+                      {isAdminOversight
+                        ? "WORKFLOW OVERSIGHT"
+                        : `LEVEL ${approval.level}`}
+                    </div>
                     <h3>{decision?.title || "Decision"}</h3>
                     <p>
-                      Requested by{" "}
+                      {isAdminOversight ? "Decision owner" : "Requested by"}{" "}
                       {approval.requestedBy?.name || "Workspace member"}
                       {decision?.team?.name ? ` · ${decision.team.name}` : ""}
                     </p>
@@ -222,7 +264,7 @@ function ReviewsPage({
                   >
                     Open decision <ArrowUpRight size={14} />
                   </button>
-                  {commentId === approval.id && (
+                  {!isAdminOversight && commentId === approval.id && (
                     <textarea
                       value={comments[approval.id] || ""}
                       onChange={(event) =>
@@ -235,40 +277,43 @@ function ReviewsPage({
                       rows="3"
                     />
                   )}
-                  <div className="review-action-row">
-                    <button
-                      className="review-comment-button"
-                      type="button"
-                      onClick={() =>
-                        setCommentId(
-                          commentId === approval.id ? null : approval.id,
-                        )
-                      }
-                    >
-                      Comment
-                    </button>
-                    <button
-                      className="review-reject-button"
-                      type="button"
-                      disabled={actingId === approval.id}
-                      onClick={() => act(approval.id, "Rejected")}
-                    >
-                      Reject
-                    </button>
-                    <button
-                      className="review-approve-button"
-                      type="button"
-                      disabled={actingId === approval.id}
-                      onClick={() => act(approval.id, "Approved")}
-                    >
-                      {actingId === approval.id
-                        ? "Processing..."
-                        : approval.level === 2
-                          ? "Final approve"
-                          : "Approve"}
-                      <CheckCircle2 size={14} />
-                    </button>
-                  </div>
+
+                  {!isAdminOversight && (
+                    <div className="review-action-row">
+                      <button
+                        className="review-comment-button"
+                        type="button"
+                        onClick={() =>
+                          setCommentId(
+                            commentId === approval.id ? null : approval.id,
+                          )
+                        }
+                      >
+                        Comment
+                      </button>
+                      <button
+                        className="review-reject-button"
+                        type="button"
+                        disabled={actingId === approval.id}
+                        onClick={() => act(approval.id, "Rejected")}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        className="review-approve-button"
+                        type="button"
+                        disabled={actingId === approval.id}
+                        onClick={() => act(approval.id, "Approved")}
+                      >
+                        {actingId === approval.id
+                          ? "Processing..."
+                          : approval.level === 2
+                            ? "Final approve"
+                            : "Approve"}
+                        <CheckCircle2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </article>
             );
@@ -1276,47 +1321,28 @@ function KnowledgePage({
         return;
       }
 
-      // Open synchronously from the click event to avoid Chrome popup blocking.
-      const newWindow = window.open("", "_blank");
-
-      if (!newWindow) {
-        alert("Please allow pop-ups for DecisionVault to open documents.");
-        return;
-      }
+      const newWindow = window.open(
+        "about:blank",
+        "_blank",
+        "noopener,noreferrer",
+      );
 
       try {
-        newWindow.opener = null;
-        newWindow.document.title = "Opening document...";
-        newWindow.document.body.innerHTML = `
-          <div
-            style="
-              font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-              padding: 40px;
-              text-align: center;
-            "
-          >
-            Opening document...
-          </div>
-        `;
-
-        const fileBlob = await apiRequest(
-          `/api/decisions/${decisionId}/documents/${documentId}/content`,
-          { responseType: "blob" },
+        const responseData = await apiRequest(
+          `/api/decisions/${decisionId}/documents/${documentId}/url`,
         );
 
-        if (!(fileBlob instanceof Blob) || fileBlob.size === 0) {
-          throw new Error("The document file is empty or could not be loaded.");
+        if (!responseData?.url) {
+          throw new Error("Document URL was not returned.");
         }
 
-        const objectUrl = URL.createObjectURL(fileBlob);
-        newWindow.location.replace(objectUrl);
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      } catch (error) {
-        try {
-          newWindow.close();
-        } catch {
-          // Ignore popup close errors.
+        if (newWindow) {
+          newWindow.location.href = responseData.url;
+        } else {
+          window.open(responseData.url, "_blank", "noopener,noreferrer");
         }
+      } catch (error) {
+        newWindow?.close();
 
         console.error("Open graph document error:", error);
 
@@ -2619,55 +2645,32 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
                     return;
                   }
 
-                  // Open synchronously from the click event to avoid Chrome popup blocking.
-                  const newWindow = window.open("", "_blank");
-
-                  if (!newWindow) {
-                    alert(
-                      "Please allow pop-ups for DecisionVault to open documents.",
-                    );
-                    return;
-                  }
+                  const newWindow = window.open(
+                    "about:blank",
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
 
                   try {
-                    newWindow.opener = null;
-                    newWindow.document.title = "Opening document...";
-                    newWindow.document.body.innerHTML = `
-                      <div
-                        style="
-                          font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-                          padding: 40px;
-                          text-align: center;
-                        "
-                      >
-                        Opening document...
-                      </div>
-                    `;
-
-                    const fileBlob = await apiRequest(
-                      `/api/decisions/${decisionId}/documents/${documentId}/content`,
-                      { responseType: "blob" },
+                    const responseData = await apiRequest(
+                      `/api/decisions/${decisionId}/documents/${documentId}/url`,
                     );
 
-                    if (!(fileBlob instanceof Blob) || fileBlob.size === 0) {
-                      throw new Error(
-                        "The document file is empty or could not be loaded.",
+                    if (!responseData?.url) {
+                      throw new Error("Document URL was not returned.");
+                    }
+
+                    if (newWindow) {
+                      newWindow.location.href = responseData.url;
+                    } else {
+                      window.open(
+                        responseData.url,
+                        "_blank",
+                        "noopener,noreferrer",
                       );
                     }
-
-                    const objectUrl = URL.createObjectURL(fileBlob);
-                    newWindow.location.replace(objectUrl);
-                    window.setTimeout(
-                      () => URL.revokeObjectURL(objectUrl),
-                      60_000,
-                    );
                   } catch (error) {
-                    try {
-                      newWindow.close();
-                    } catch {
-                      // Ignore popup close errors.
-                    }
-
+                    newWindow?.close();
                     console.error("Open document error:", error);
                     alert(error.message || "Unable to open the document.");
                   }

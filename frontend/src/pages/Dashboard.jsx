@@ -105,6 +105,7 @@ function Dashboard() {
   const [uploadingDiscussionFile, setUploadingDiscussionFile] = useState(false);
 
   const [creatingDecision, setCreatingDecision] = useState(false);
+  const [creatingDecisionAction, setCreatingDecisionAction] = useState(null);
   const [savingDecision, setSavingDecision] = useState(false);
   const [deletingDecision, setDeletingDecision] = useState(false);
   const [savingAlternative, setSavingAlternative] = useState(false);
@@ -120,6 +121,7 @@ function Dashboard() {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [dashboardDocumentCount, setDashboardDocumentCount] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
 
   const normalizedRole = (currentUser?.role || "Employee").trim().toLowerCase();
 
@@ -407,6 +409,25 @@ function Dashboard() {
     }
   };
 
+  const fetchPendingApprovals = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    if (!isReviewer && !isManager) {
+      setPendingApprovals([]);
+      return;
+    }
+
+    try {
+      const data = await apiRequest("/api/approvals/pending");
+      setPendingApprovals(Array.isArray(data) ? data : data?.approvals || []);
+    } catch (error) {
+      console.error("Fetch pending approvals error:", error);
+      setPendingApprovals([]);
+    }
+  };
+
   const markAllNotificationsRead = async () => {
     try {
       await apiRequest("/api/notifications/read-all", { method: "PATCH" });
@@ -481,9 +502,18 @@ function Dashboard() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    const timer = window.setInterval(fetchNotifications, 30000);
+    if (currentUser?.id) {
+      fetchPendingApprovals();
+    }
+  }, [currentUser?.id, role]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchNotifications();
+      fetchPendingApprovals();
+    }, 30000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [currentUser?.id, role]);
 
   useEffect(() => {
     if (modalRef.current) {
@@ -695,33 +725,45 @@ function Dashboard() {
 
     if (!decisionForm.title.trim() || !decisionForm.problemStatement.trim()) {
       alert("Please fill in both the decision title and problem statement.");
-
       return;
     }
 
+    const submitter = event.nativeEvent?.submitter;
+    const action = submitter?.value === "post" ? "post" : "draft";
+    const requestedStatus = action === "post" ? "UnderReview" : "Draft";
+
     try {
       setCreatingDecision(true);
+      setCreatingDecisionAction(action);
 
-      await apiRequest("/api/decisions", {
+      const responseData = await apiRequest("/api/decisions", {
         method: "POST",
         body: JSON.stringify({
           title: decisionForm.title.trim(),
           problemStatement: decisionForm.problemStatement.trim(),
+          status: requestedStatus,
           teamId: decisionForm.teamId ? Number(decisionForm.teamId) : null,
         }),
       });
 
       setDecisionForm(EMPTY_DECISION_FORM);
-
       setModal(null);
 
       await fetchDecisions();
+      await fetchNotifications();
+
+      if (action === "post") {
+        alert(
+          responseData?.message ||
+            "Decision posted and sent to a reviewer for approval.",
+        );
+      }
     } catch (createError) {
       console.error("Create decision error:", createError);
-
       alert(createError.message || "Unable to create decision.");
     } finally {
       setCreatingDecision(false);
+      setCreatingDecisionAction(null);
     }
   };
 
@@ -1167,7 +1209,54 @@ function Dashboard() {
       }
     : undefined;
 
-  const pendingApprovalCount = reviewCount;
+  const pendingApprovalCount =
+    isReviewer || isManager
+      ? pendingApprovals.length
+      : isAdministrator
+        ? reviewCount
+        : 0;
+
+  const overviewReviewItems = useMemo(() => {
+    if (isReviewer || isManager) {
+      return pendingApprovals
+        .map((approval) => approval.decision)
+        .filter(Boolean)
+        .slice(0, 4);
+    }
+
+    if (isAdministrator) {
+      return dashboardDecisions
+        .filter((decision) => decision.status === "Under Review")
+        .slice(0, 4);
+    }
+
+    return [];
+  }, [
+    pendingApprovals,
+    dashboardDecisions,
+    isReviewer,
+    isManager,
+    isAdministrator,
+  ]);
+
+  const reviewSummaryTitle = isReviewer
+    ? "Reviews assigned to you"
+    : isManager
+      ? "Approvals assigned to you"
+      : isAdministrator
+        ? "Decisions need attention"
+        : "Review queue";
+
+  const reviewSummarySubtitle = pendingApprovalCount
+    ? isReviewer
+      ? "Review your assigned decisions and keep the workflow moving."
+      : isManager
+        ? "Complete the final approvals assigned to you."
+        : "Keep the approval workflow moving."
+    : isReviewer || isManager
+      ? "You have no pending approval actions."
+      : "No decisions are currently waiting for review.";
+
   const reviewRate = totalDecisions
     ? Math.round((reviewCount / totalDecisions) * 100)
     : 0;
@@ -1831,47 +1920,45 @@ function Dashboard() {
                       </div>
 
                       <div className="overview-v4-review-summary">
-                        <div>
-                          <AnimatedNumber value={reviewCount} />
-                        </div>
-                        <div>
-                          <strong>
-                            {reviewCount
-                              ? "Decisions need attention"
-                              : "Queue is clear"}
-                          </strong>
-                          <span>
-                            {reviewCount
-                              ? "Keep the approval workflow moving."
-                              : "No decisions are currently waiting for review."}
+                        <div className="overview-v4-review-count-badge">
+                          <span className="overview-v4-review-count-ring" />
+                          <span className="overview-v4-review-count-icon">
+                            <Clock3 size={12} />
                           </span>
+                          <strong>
+                            <AnimatedNumber value={pendingApprovalCount} />
+                          </strong>
+                        </div>
+                        <div className="overview-v4-review-summary-copy">
+                          <strong>{reviewSummaryTitle}</strong>
+                          <span>{reviewSummarySubtitle}</span>
                         </div>
                       </div>
 
                       <div className="overview-v4-review-list">
-                        {dashboardDecisions
-                          .filter(
-                            (decision) => decision.status === "Under Review",
-                          )
-                          .slice(0, 4)
-                          .map((decision) => (
-                            <button
-                              key={decision.id}
-                              type="button"
-                              onClick={() => openDecision(decision)}
-                            >
-                              <i />
-                              <span>
-                                <strong>{decision.name}</strong>
-                                <small>
-                                  {decision.team} ·{" "}
-                                  {decision.relativeCreated || decision.created}
-                                </small>
-                              </span>
-                              <ChevronRight size={15} />
-                            </button>
-                          ))}
-                        {!reviewCount && (
+                        {overviewReviewItems.map((decision) => (
+                          <button
+                            key={decision.id}
+                            type="button"
+                            onClick={() => openDecision(decision)}
+                          >
+                            <i />
+                            <span>
+                              <strong>{decision.title || decision.name}</strong>
+                              <small>
+                                {decision.team?.name ||
+                                  decision.team ||
+                                  "Workspace"}{" "}
+                                ·{" "}
+                                {formatRelativeTime(
+                                  decision.updatedAt || decision.createdAt,
+                                )}
+                              </small>
+                            </span>
+                            <ChevronRight size={15} />
+                          </button>
+                        ))}
+                        {!pendingApprovalCount && (
                           <div className="overview-v4-review-empty">
                             <CheckCircle2 size={18} />
                             <span>All approval stages are clear.</span>
@@ -2335,17 +2422,33 @@ function Dashboard() {
                         className="modal-secondary"
                         type="button"
                         onClick={() => setModal(null)}
+                        disabled={creatingDecision}
                       >
                         Cancel
                       </button>
 
                       <button
-                        className="modal-primary"
+                        className="modal-secondary"
                         type="submit"
+                        name="decisionAction"
+                        value="draft"
                         disabled={creatingDecision}
                       >
-                        {creatingDecision ? "Creating..." : "Create decision"}
+                        {creatingDecision && creatingDecisionAction === "draft"
+                          ? "Saving..."
+                          : "Save as draft"}
+                      </button>
 
+                      <button
+                        className="modal-primary"
+                        type="submit"
+                        name="decisionAction"
+                        value="post"
+                        disabled={creatingDecision}
+                      >
+                        {creatingDecision && creatingDecisionAction === "post"
+                          ? "Posting..."
+                          : "Post for review"}
                         <ArrowUpRight size={14} />
                       </button>
                     </div>
