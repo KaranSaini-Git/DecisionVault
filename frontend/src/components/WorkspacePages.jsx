@@ -20,9 +20,6 @@ import {
   X,
 } from "lucide-react";
 import { openStoredDocument } from "../utils/documentViewer.js";
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-
 const KNOWLEDGE_GRAPH_WIDTH = 1800;
 const KNOWLEDGE_GRAPH_HEIGHT = 1300;
 const KNOWLEDGE_GRAPH_DEFAULT_ZOOM = 1;
@@ -1007,6 +1004,7 @@ function KnowledgePage({
 
     const WIDTH = KNOWLEDGE_GRAPH_WIDTH;
     const HEIGHT = KNOWLEDGE_GRAPH_HEIGHT;
+
     const CENTER_X = WIDTH / 2;
     const CENTER_Y = HEIGHT / 2;
 
@@ -1018,40 +1016,65 @@ function KnowledgePage({
       y: CENTER_Y,
     };
 
-    const groups = {
+    const groupNodes = {
       person: visibleNodeList.find((node) => node.type === "person"),
+
       team: visibleNodeList.find((node) => node.type === "team"),
+
       documents: visibleNodeList.find(
         (node) => node.metadata?.group === "documents",
       ),
+
       alternatives: visibleNodeList.find(
         (node) => node.metadata?.group === "alternatives",
       ),
+
       discussions: visibleNodeList.find(
         (node) => node.metadata?.group === "discussions",
       ),
     };
 
-    // Keep every first-degree group inside the initial viewport.
+    /*
+     * Keep every major branch in its own visual lane.
+     */
     const groupPositions = {
-      // Keep the complete first-degree map inside the 100% viewport.
-      person: [CENTER_X, 465],
-      team: [630, CENTER_Y],
-      documents: [1170, CENTER_Y],
-      alternatives: [560, 820],
-      discussions: [1240, 820],
+      person: [CENTER_X, 155],
+      team: [390, CENTER_Y],
+      documents: [1090, 415],
+      alternatives: [660, 900],
+      discussions: [1090, 900],
     };
 
-    Object.entries(groups).forEach(([key, node]) => {
+    Object.entries(groupNodes).forEach(([key, node]) => {
       if (!node) return;
+
       const [x, y] = groupPositions[key];
-      positions[node.id] = { ...node, x, y };
+
+      positions[node.id] = {
+        ...node,
+        x,
+        y,
+      };
     });
 
-    const placeGrid = ({ items, startX, startY, columns, stepX, stepY }) => {
+    const placeChildren = ({
+      items,
+      startX,
+      centerY,
+      columns,
+      stepX,
+      stepY,
+    }) => {
+      if (!items.length) return;
+
+      const rows = Math.ceil(items.length / columns);
+
+      const startY = centerY - ((rows - 1) * stepY) / 2;
+
       items.forEach((node, index) => {
         const column = index % columns;
         const row = Math.floor(index / columns);
+
         positions[node.id] = {
           ...node,
           x: startX + column * stepX,
@@ -1060,96 +1083,50 @@ function KnowledgePage({
       });
     };
 
-    // Children fan away from their group instead of stacking on top of it.
+    /*
+     * Documents: upper-right
+     */
     if (expanded.documents) {
-      placeGrid({
+      placeChildren({
         items: visibleNodeList.filter((node) => node.type === "document"),
         startX: 1330,
-        startY: 430,
+        centerY: 415,
         columns: 2,
-        stepX: 205,
-        stepY: 105,
+        stepX: 235,
+        stepY: 108,
       });
     }
 
+    /*
+     * Alternatives: lower-left
+     */
     if (expanded.alternatives) {
-      /*
-       * Mirror the Discussions branch. Keep the Alternatives group
-       * fixed in place and lay out only the actual alternative items.
-       * The tree grows to the LEFT of the group, with the same compact
-       * two-column / multi-row structure used by Discussions.
-       */
-      const alternativeGroup = visibleNodeList.find(
-        (node) => node.metadata?.group === "alternatives",
-      );
-
-      const alternativeChildren = visibleNodeList.filter(
-        (node) => node.type === "alternative" && !node.metadata?.group,
-      );
-
-      if (alternativeGroup && alternativeChildren.length) {
-        const anchor = positions[alternativeGroup.id];
-
-        const columns = 2;
-        const stepX = 210;
-        const stepY = 125;
-        const rows = Math.ceil(alternativeChildren.length / columns);
-
-        /* Mirror Discussions horizontally: children grow LEFT. */
-        const startX = anchor.x - 220;
-        const startY = anchor.y - ((rows - 1) * stepY) / 2;
-
-        alternativeChildren.forEach((node, index) => {
-          const column = index % columns;
-
-          const row = Math.floor(index / columns);
-
-          positions[node.id] = {
-            ...node,
-            x: startX - column * stepX,
-            y: startY + row * stepY,
-          };
-        });
-      }
+      placeChildren({
+        items: visibleNodeList.filter(
+          (node) => node.type === "alternative" && !node.metadata?.group,
+        ),
+        startX: 180,
+        centerY: 900,
+        columns: 2,
+        stepX: 225,
+        stepY: 108,
+      });
     }
 
+    /*
+     * Discussions: lower-right
+     */
     if (expanded.discussions) {
-      /*
-       * Keep the Discussions group fixed in place.
-       * Only the actual discussion children are laid out.
-       * They grow to the RIGHT of the group in a compact tree.
-       */
-      const discussionGroup = visibleNodeList.find(
-        (node) => node.metadata?.group === "discussions",
-      );
-
-      const discussionChildren = visibleNodeList.filter(
-        (node) => node.type === "discussion" && !node.metadata?.group,
-      );
-
-      if (discussionGroup && discussionChildren.length) {
-        const anchor = positions[discussionGroup.id];
-
-        const columns = 2;
-        const stepX = 245;
-        const stepY = 125;
-        const rows = Math.ceil(discussionChildren.length / columns);
-
-        const startX = anchor.x + 250;
-        const startY = anchor.y - ((rows - 1) * stepY) / 2;
-
-        discussionChildren.forEach((node, index) => {
-          const column = index % columns;
-
-          const row = Math.floor(index / columns);
-
-          positions[node.id] = {
-            ...node,
-            x: startX + column * stepX,
-            y: startY + row * stepY,
-          };
-        });
-      }
+      placeChildren({
+        items: visibleNodeList.filter(
+          (node) => node.type === "discussion" && !node.metadata?.group,
+        ),
+        startX: 1330,
+        centerY: 900,
+        columns: 2,
+        stepX: 235,
+        stepY: 108,
+      });
     }
 
     return positions;
@@ -1260,8 +1237,12 @@ function KnowledgePage({
       alternatives: true,
       discussions: true,
     });
-    setZoom(0.6);
-    setPan({ x: 0, y: -125 });
+
+    setZoom(0.44);
+    setPan({
+      x: 0,
+      y: 0,
+    });
   };
 
   const collapseAll = () => {
@@ -1318,34 +1299,19 @@ function KnowledgePage({
       const decisionId = Number(node.metadata?.decisionId);
 
       if (!documentId || !decisionId) {
+        alert(
+          "This document cannot be opened because its document or decision ID is missing.",
+        );
         return;
       }
 
-      const newWindow = window.open(
-        "about:blank",
-        "_blank",
-        "noopener,noreferrer",
-      );
-
       try {
-        const responseData = await apiRequest(
-          `/api/decisions/${decisionId}/documents/${documentId}/url`,
-        );
-
-        if (!responseData?.url) {
-          throw new Error("Document URL was not returned.");
-        }
-
-        if (newWindow) {
-          newWindow.location.href = responseData.url;
-        } else {
-          window.open(responseData.url, "_blank", "noopener,noreferrer");
-        }
+        await openStoredDocument({
+          decisionId,
+          documentId,
+        });
       } catch (error) {
-        newWindow?.close();
-
         console.error("Open graph document error:", error);
-
         alert(error.message || "Unable to open the document.");
       }
 
@@ -2109,14 +2075,35 @@ function DocumentKnowledgeRow({ document }) {
         <strong>{document.decision?.title || "Supporting document"}</strong>
         <span>{document.decision?.team?.name || "Shared workspace"}</span>
       </div>
-      <a
+      <button
+        type="button"
         className="knowledge-view-button"
-        href={`${API_BASE_URL}/${String(document.filePath || "").replaceAll("\\", "/")}`}
-        target="_blank"
-        rel="noreferrer"
+        onClick={async () => {
+          const decisionId = Number(
+            document.decisionId ?? document.decision?.id,
+          );
+          const documentId = Number(document.id);
+
+          if (!decisionId || !documentId) {
+            alert(
+              "This document cannot be opened because its document or decision ID is missing.",
+            );
+            return;
+          }
+
+          try {
+            await openStoredDocument({
+              decisionId,
+              documentId,
+            });
+          } catch (error) {
+            console.error("Open knowledge document error:", error);
+            alert(error.message || "Unable to open the document.");
+          }
+        }}
       >
         Open <ArrowUpRight size={13} />
-      </a>
+      </button>
     </div>
   );
 }
@@ -2631,13 +2618,14 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
                   ))}
               </div>
 
-              <a
-                href="#"
+              <button
+                type="button"
                 className="document-open-link-v2"
-                onClick={async (event) => {
-                  event.preventDefault();
+                onClick={async () => {
+                  const decisionId = Number(
+                    document.decisionId ?? document.decision?.id,
+                  );
 
-                  const decisionId = Number(document.decisionId);
                   const documentId = Number(document.id);
 
                   if (!decisionId || !documentId) {
@@ -2645,32 +2633,12 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
                     return;
                   }
 
-                  const newWindow = window.open(
-                    "about:blank",
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-
                   try {
-                    const responseData = await apiRequest(
-                      `/api/decisions/${decisionId}/documents/${documentId}/url`,
-                    );
-
-                    if (!responseData?.url) {
-                      throw new Error("Document URL was not returned.");
-                    }
-
-                    if (newWindow) {
-                      newWindow.location.href = responseData.url;
-                    } else {
-                      window.open(
-                        responseData.url,
-                        "_blank",
-                        "noopener,noreferrer",
-                      );
-                    }
+                    await openStoredDocument({
+                      decisionId,
+                      documentId,
+                    });
                   } catch (error) {
-                    newWindow?.close();
                     console.error("Open document error:", error);
                     alert(error.message || "Unable to open the document.");
                   }
@@ -2678,7 +2646,7 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
               >
                 Open
                 <ArrowUpRight size={13} />
-              </a>
+              </button>
             </article>
           ))
         ) : (

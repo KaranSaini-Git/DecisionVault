@@ -7,6 +7,52 @@ import { logActivity } from "../services/activityService.js";
 import { canManageDecision } from "../services/authorizationService.js";
 import { supabase, bucketName } from "../services/supabaseStorage.js";
 
+const MIME_TYPES = {
+  pdf: "application/pdf",
+  txt: "text/plain; charset=utf-8",
+  csv: "text/csv; charset=utf-8",
+
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+
+  html: "text/html; charset=utf-8",
+  htm: "text/html; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  json: "application/json; charset=utf-8",
+
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+const getMimeType = (filename) => {
+  const extension = String(filename || "")
+    .split(".")
+    .pop()
+    .toLowerCase();
+
+  return MIME_TYPES[extension] || "application/octet-stream";
+};
+
+const sanitizeFilename = (filename) => {
+  return (
+    String(filename || "document")
+      .replace(/[\r\n"]/g, "")
+      .replace(/[\\/]/g, "-")
+      .trim() || "document"
+  );
+};
+
 const createStorageFilename = (originalFilename) => {
   const extensionMatch = originalFilename.match(/\.[^./\\]+$/);
   const extension = extensionMatch ? extensionMatch[0].toLowerCase() : "";
@@ -21,52 +67,6 @@ const createStorageFilename = (originalFilename) => {
   const safeBaseName = baseName || "document";
 
   return `${crypto.randomUUID()}-${safeBaseName}${extension}`;
-};
-
-const getMimeType = (filename) => {
-  const extension = String(filename || "")
-    .split(".")
-    .pop()
-    .toLowerCase();
-
-  const mimeTypes = {
-    pdf: "application/pdf",
-    txt: "text/plain; charset=utf-8",
-    csv: "text/csv; charset=utf-8",
-
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    gif: "image/gif",
-    webp: "image/webp",
-    svg: "image/svg+xml",
-
-    html: "text/html; charset=utf-8",
-    htm: "text/html; charset=utf-8",
-    css: "text/css; charset=utf-8",
-    js: "text/javascript; charset=utf-8",
-    json: "application/json; charset=utf-8",
-
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-
-    ppt: "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  };
-
-  return mimeTypes[extension] || "application/octet-stream";
-};
-
-const sanitizeFilename = (filename) => {
-  return (
-    String(filename || "document")
-      .replace(/[\r\n"]/g, "")
-      .trim()
-      .replace(/[\\/]/g, "-") || "document"
-  );
 };
 
 const uploadDocument = async (req, res) => {
@@ -122,9 +122,14 @@ const uploadDocument = async (req, res) => {
       });
 
     if (uploadError) {
-      console.error("Supabase upload error:", uploadError);
+      console.error("Supabase upload error:", {
+        message: uploadError.message,
+        name: uploadError.name,
+        statusCode: uploadError.statusCode,
+        storagePath,
+      });
 
-      return res.status(500).json({
+      return res.status(502).json({
         message:
           uploadError.message || "Failed to store document in cloud storage",
       });
@@ -211,10 +216,6 @@ const getDocuments = async (req, res) => {
   }
 };
 
-/*
- * Existing signed-URL method.
- * Kept for compatibility with any existing frontend code.
- */
 const getDocumentUrl = async (req, res) => {
   try {
     const decisionId = Number(req.params.decisionId);
@@ -252,9 +253,6 @@ const getDocumentUrl = async (req, res) => {
       });
     }
 
-    /*
-     * Support older local files stored in backend/uploads.
-     */
     if (filePath.startsWith("uploads/")) {
       return res.status(200).json({
         url: `/${filePath}`,
@@ -289,18 +287,9 @@ const getDocumentUrl = async (req, res) => {
 };
 
 /*
- * NEW METHOD
+ * Returns the actual file bytes.
  *
- * This is the method your new frontend Open button calls.
- *
- * Instead of returning a Supabase signed URL, the backend:
- *
- * 1. Finds the document in Prisma
- * 2. Finds its filePath
- * 3. Downloads the private file from Supabase Storage
- * 4. Sends the actual file bytes to the browser
- *
- * This avoids the blank about:blank tab problem.
+ * This is the endpoint used by the new frontend document opener.
  */
 const getDocumentContent = async (req, res) => {
   try {
@@ -340,40 +329,34 @@ const getDocumentContent = async (req, res) => {
     }
 
     const filename = sanitizeFilename(document.filename);
-    const contentType = getMimeType(document.filename);
+    const mimeType = getMimeType(document.filename);
 
     /*
-     * OLD LOCAL FILE SUPPORT
-     *
-     * Older DecisionVault files may still be in:
-     *
-     * backend/uploads/...
+     * Support legacy local files.
      */
     if (filePath.startsWith("uploads/")) {
-      const localFilePath = path.resolve(filePath);
+      const localPath = path.resolve(filePath);
 
-      if (!fs.existsSync(localFilePath)) {
+      if (!fs.existsSync(localPath)) {
         return res.status(404).json({
           message:
             "The document exists in the database, but the local file is missing from the backend.",
         });
       }
 
-      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
 
-      return res.sendFile(localFilePath);
+      return res.sendFile(localPath);
     }
 
     /*
-     * CURRENT SUPABASE STORAGE
-     *
-     * Example:
+     * Current files are stored in:
      *
      * decision-documents/
-     * └── decisions/
-     *     └── 12/
-     *         └── uuid-file.pdf
+     *   decisions/
+     *     <decisionId>/
+     *       <generated-file-name>
      */
     const { data: fileData, error: downloadError } = await supabase.storage
       .from(bucketName)
@@ -389,29 +372,23 @@ const getDocumentContent = async (req, res) => {
       });
 
       return res.status(404).json({
-        message:
-          "The document record exists, but the actual file could not be found in Supabase Storage.",
+        message: "The document file could not be found in Supabase Storage.",
       });
     }
 
-    const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+    const buffer = Buffer.from(await fileData.arrayBuffer());
 
-    if (!fileBuffer.length) {
+    if (!buffer.length) {
       return res.status(404).json({
         message: "The document file is empty.",
       });
     }
 
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", String(fileBuffer.length));
-
-    /*
-     * inline = browser should try to display supported file types
-     * such as PDF/images/text.
-     */
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", String(buffer.length));
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
 
-    return res.status(200).send(fileBuffer);
+    return res.status(200).send(buffer);
   } catch (error) {
     console.error("Get document content error:", error);
 
