@@ -808,6 +808,8 @@ function KnowledgePage({
     panX: 0,
     panY: 0,
   });
+  const canvasRef = useRef(null);
+  const autoFitRequestedRef = useRef(false);
 
   const searchDecisions = async (value) => {
     const requestId = ++searchRequestRef.current;
@@ -1002,130 +1004,215 @@ function KnowledgePage({
   const nodePositions = useMemo(() => {
     if (!selectedDecision) return {};
 
-    const WIDTH = KNOWLEDGE_GRAPH_WIDTH;
-    const HEIGHT = KNOWLEDGE_GRAPH_HEIGHT;
-
-    const CENTER_X = WIDTH / 2;
-    const CENTER_Y = HEIGHT / 2;
+    const CENTER_X = KNOWLEDGE_GRAPH_WIDTH / 2;
+    const CENTER_Y = KNOWLEDGE_GRAPH_HEIGHT / 2;
 
     const positions = {};
 
-    positions[selectedDecision.id] = {
+    const NODE_SIZES = {
+      decision: { width: 250, height: 94 },
+      group: { width: 210, height: 74 },
+      default: { width: 190, height: 68 },
+    };
+
+    const getNodeSize = (node) => {
+      if (node.type === "decision") return NODE_SIZES.decision;
+      if (node.metadata?.group) return NODE_SIZES.group;
+      return NODE_SIZES.default;
+    };
+
+    const centerNode = {
       ...selectedDecision,
       x: CENTER_X,
       y: CENTER_Y,
     };
 
+    positions[selectedDecision.id] = centerNode;
+
     const groupNodes = {
       person: visibleNodeList.find((node) => node.type === "person"),
-
       team: visibleNodeList.find((node) => node.type === "team"),
-
       documents: visibleNodeList.find(
         (node) => node.metadata?.group === "documents",
       ),
-
       alternatives: visibleNodeList.find(
         (node) => node.metadata?.group === "alternatives",
       ),
-
       discussions: visibleNodeList.find(
         (node) => node.metadata?.group === "discussions",
       ),
     };
 
     /*
-     * Keep every major branch in its own visual lane.
+     * Primary branches form a compact radial tree around the decision.
+     * Children are always placed on the outer side of their branch.
      */
-    const groupPositions = {
-      person: [CENTER_X, 155],
-      team: [390, CENTER_Y],
-      documents: [1090, 415],
-      alternatives: [660, 900],
-      discussions: [1090, 900],
+    const GROUP_RADIUS = 275;
+
+    const branchAngles = {
+      person: -Math.PI / 2,
+      team: Math.PI,
+      documents: -Math.PI / 4,
+      alternatives: (3 * Math.PI) / 4,
+      discussions: Math.PI / 4,
     };
 
     Object.entries(groupNodes).forEach(([key, node]) => {
       if (!node) return;
 
-      const [x, y] = groupPositions[key];
+      const angle = branchAngles[key];
 
       positions[node.id] = {
+        ...node,
+        x: CENTER_X + Math.cos(angle) * GROUP_RADIUS,
+        y: CENTER_Y + Math.sin(angle) * GROUP_RADIUS,
+      };
+    });
+
+    const placedNodes = [
+      positions[selectedDecision.id],
+      ...Object.values(groupNodes)
+        .filter(Boolean)
+        .map((node) => positions[node.id])
+        .filter(Boolean),
+    ];
+
+    const overlaps = (x, y, size, padding = 26) => {
+      return placedNodes.some((node) => {
+        const otherSize = getNodeSize(node);
+
+        const minX = (size.width + otherSize.width) / 2 + padding;
+        const minY = (size.height + otherSize.height) / 2 + padding;
+
+        return Math.abs(x - node.x) < minX && Math.abs(y - node.y) < minY;
+      });
+    };
+
+    const reserve = (node, x, y) => {
+      const placed = {
         ...node,
         x,
         y,
       };
-    });
 
-    const placeChildren = ({
-      items,
-      startX,
-      centerY,
-      columns,
-      stepX,
-      stepY,
-    }) => {
-      if (!items.length) return;
-
-      const rows = Math.ceil(items.length / columns);
-
-      const startY = centerY - ((rows - 1) * stepY) / 2;
-
-      items.forEach((node, index) => {
-        const column = index % columns;
-        const row = Math.floor(index / columns);
-
-        positions[node.id] = {
-          ...node,
-          x: startX + column * stepX,
-          y: startY + row * stepY,
-        };
-      });
+      positions[node.id] = placed;
+      placedNodes.push(placed);
     };
 
-    /*
-     * Documents: upper-right
-     */
-    if (expanded.documents) {
-      placeChildren({
+    const placeRadialChildren = ({
+      items,
+      anchor,
+      centerAngle,
+      spread = Math.PI * 0.58,
+      initialRadius = 185,
+      ringGap = 145,
+      maxItemsPerRing = 3,
+    }) => {
+      if (!anchor || !items.length) return;
+
+      let cursor = 0;
+      let ring = 0;
+
+      while (cursor < items.length && ring < 16) {
+        const radius = initialRadius + ring * ringGap;
+        const remaining = items.length - cursor;
+        const count = Math.min(maxItemsPerRing, remaining);
+
+        const baseStart = count === 1 ? centerAngle : centerAngle - spread / 2;
+
+        const baseStep = count === 1 ? 0 : spread / (count - 1);
+
+        let placedThisRing = 0;
+
+        for (let index = 0; index < count; index += 1) {
+          const node = items[cursor + index];
+          const size = getNodeSize(node);
+
+          let candidate = null;
+
+          for (let attempt = 0; attempt <= 28; attempt += 1) {
+            const side = attempt % 2 === 0 ? 1 : -1;
+            const step = Math.ceil(attempt / 2);
+            const angleOffset = step === 0 ? 0 : side * step * 0.035;
+
+            const angle =
+              (count === 1 ? centerAngle : baseStart + baseStep * index) +
+              angleOffset;
+
+            const x = anchor.x + Math.cos(angle) * radius;
+            const y = anchor.y + Math.sin(angle) * radius;
+
+            if (!overlaps(x, y, size)) {
+              candidate = { x, y };
+              break;
+            }
+          }
+
+          /*
+           * If the ring is blocked by another branch, move this item to
+           * the next open radial shell instead of allowing a collision.
+           */
+          if (!candidate) {
+            for (let push = 1; push <= 8 && !candidate; push += 1) {
+              const radiusPush = radius + push * 55;
+              const angle = centerAngle + (index - (count - 1) / 2) * 0.18;
+
+              const x = anchor.x + Math.cos(angle) * radiusPush;
+              const y = anchor.y + Math.sin(angle) * radiusPush;
+
+              if (!overlaps(x, y, size)) {
+                candidate = { x, y };
+              }
+            }
+          }
+
+          /*
+           * There is always a safe final fallback because the canvas is
+           * pannable and the layout can grow outward indefinitely.
+           */
+          if (!candidate) {
+            const radiusPush = radius + 520 + index * 40;
+
+            candidate = {
+              x: anchor.x + Math.cos(centerAngle) * radiusPush,
+              y: anchor.y + Math.sin(centerAngle) * radiusPush,
+            };
+          }
+
+          reserve(node, candidate.x, candidate.y);
+          placedThisRing += 1;
+        }
+
+        cursor += placedThisRing;
+        ring += 1;
+      }
+    };
+
+    if (expanded.documents && groupNodes.documents) {
+      placeRadialChildren({
         items: visibleNodeList.filter((node) => node.type === "document"),
-        startX: 1330,
-        centerY: 415,
-        columns: 2,
-        stepX: 235,
-        stepY: 108,
+        anchor: positions[groupNodes.documents.id],
+        centerAngle: branchAngles.documents,
       });
     }
 
-    /*
-     * Alternatives: lower-left
-     */
-    if (expanded.alternatives) {
-      placeChildren({
+    if (expanded.alternatives && groupNodes.alternatives) {
+      placeRadialChildren({
         items: visibleNodeList.filter(
           (node) => node.type === "alternative" && !node.metadata?.group,
         ),
-        startX: 180,
-        centerY: 900,
-        columns: 2,
-        stepX: 225,
-        stepY: 108,
+        anchor: positions[groupNodes.alternatives.id],
+        centerAngle: branchAngles.alternatives,
       });
     }
 
-    /*
-     * Discussions: lower-right
-     */
-    if (expanded.discussions) {
-      placeChildren({
+    if (expanded.discussions && groupNodes.discussions) {
+      placeRadialChildren({
         items: visibleNodeList.filter(
           (node) => node.type === "discussion" && !node.metadata?.group,
         ),
-        startX: 1330,
-        centerY: 900,
-        columns: 2,
-        stepX: 235,
-        stepY: 108,
+        anchor: positions[groupNodes.discussions.id],
+        centerAngle: branchAngles.discussions,
       });
     }
 
@@ -1208,51 +1295,118 @@ function KnowledgePage({
       }));
   }, [decisionOptions, search]);
 
+  const fitGraph = () => {
+    const canvas = canvasRef.current;
+
+    if (!canvas || !Object.keys(nodePositions).length) {
+      return;
+    }
+
+    const canvasWidth = canvas.clientWidth;
+    const canvasHeight = canvas.clientHeight;
+
+    if (canvasWidth <= 0 || canvasHeight <= 0) {
+      return;
+    }
+
+    const getNodeBounds = (node) => {
+      if (node.type === "decision") {
+        return { width: 250, height: 94 };
+      }
+
+      if (node.metadata?.group) {
+        return { width: 210, height: 74 };
+      }
+
+      return { width: 190, height: 68 };
+    };
+
+    const bounds = Object.values(nodePositions).map((node) => {
+      const size = getNodeBounds(node);
+
+      return {
+        left: node.x - size.width / 2,
+        right: node.x + size.width / 2,
+        top: node.y - size.height / 2,
+        bottom: node.y + size.height / 2,
+      };
+    });
+
+    if (!bounds.length) return;
+
+    const left = Math.min(...bounds.map((item) => item.left));
+    const right = Math.max(...bounds.map((item) => item.right));
+    const top = Math.min(...bounds.map((item) => item.top));
+    const bottom = Math.max(...bounds.map((item) => item.bottom));
+
+    const contentWidth = Math.max(1, right - left);
+    const contentHeight = Math.max(1, bottom - top);
+
+    const horizontalPadding = 56;
+    const verticalPadding = 56;
+
+    const fittedZoom = Math.min(
+      (canvasWidth - horizontalPadding) / contentWidth,
+      (canvasHeight - verticalPadding) / contentHeight,
+    );
+
+    const nextZoom = Math.max(
+      0.34,
+      Math.min(1.05, Number(fittedZoom.toFixed(3))),
+    );
+
+    const contentCenterX = (left + right) / 2;
+    const contentCenterY = (top + bottom) / 2;
+
+    setZoom(nextZoom);
+    setPan({
+      x: (KNOWLEDGE_GRAPH_WIDTH / 2 - contentCenterX) * nextZoom,
+      y: (KNOWLEDGE_GRAPH_HEIGHT / 2 - contentCenterY) * nextZoom,
+    });
+  };
+
+  useEffect(() => {
+    if (!autoFitRequestedRef.current) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      autoFitRequestedRef.current = false;
+      fitGraph();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [expanded, selectedDecisionId]);
+
   const toggleGroup = (group) => {
+    autoFitRequestedRef.current = true;
+
     setExpanded((current) => {
       const next = {
         ...current,
         [group]: !current[group],
       };
 
-      const anyExpanded = Object.values(next).some(Boolean);
-
-      if (!anyExpanded) {
-        setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
-        setPan({ x: 0, y: 0 });
-      } else if (!current[group]) {
-        // Give the expanded branch room by moving the world slightly.
-        if (group === "documents") {
-          setPan({ x: -90, y: 0 });
-        }
-      }
-
       return next;
     });
   };
 
   const expandAll = () => {
+    autoFitRequestedRef.current = true;
+
     setExpanded({
       documents: true,
       alternatives: true,
       discussions: true,
     });
-
-    setZoom(0.44);
-    setPan({
-      x: 0,
-      y: 0,
-    });
   };
 
   const collapseAll = () => {
+    autoFitRequestedRef.current = true;
+
     setExpanded({
       documents: false,
       alternatives: false,
       discussions: false,
     });
-    setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
-    setPan({ x: 0, y: 0 });
   };
 
   const handleNodeClick = (node) => {
@@ -1543,10 +1697,7 @@ function KnowledgePage({
               <button
                 type="button"
                 className="knowledge-graph-soft-button-v6"
-                onClick={() => {
-                  setZoom(KNOWLEDGE_GRAPH_DEFAULT_ZOOM);
-                  setPan({ x: 0, y: 0 });
-                }}
+                onClick={fitGraph}
               >
                 <Maximize2 size={14} />
                 Fit
@@ -1613,6 +1764,7 @@ function KnowledgePage({
               }
             >
               <div
+                ref={canvasRef}
                 className={`knowledge-graph-canvas-v6 ${
                   isPanning ? "is-panning" : ""
                 }`}
@@ -2625,7 +2777,6 @@ function DocumentsPage({ apiRequest, globalSearch = "" }) {
                   const decisionId = Number(
                     document.decisionId ?? document.decision?.id,
                   );
-
                   const documentId = Number(document.id);
 
                   if (!decisionId || !documentId) {
